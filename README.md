@@ -1,6 +1,6 @@
 ## Fedora Bootc GNOME Minimal
 
-Este repositório contém uma imagem personalizada baseada no Fedora Project usando o conceito de sistemas imutáveis com bootc.
+Este repositório contém uma imagem personalizada baseada no fedora-boot imagem oficial, usando o conceito de sistemas imutáveis com bootc.
 
 A proposta do projeto é ser simples e didática, ajudando iniciantes a aprender como criar suas próprias imagens de sistema personalizadas com bootc.
 
@@ -11,7 +11,7 @@ A imagem utiliza um ambiente GNOME extremamente minimalista, trazendo apenas o b
 A instalação inclui apenas:
 
 * GNOME Shell
-* GNOME Software com suporte a apenas ao Flathub
+* GNOME Software com suporte ao Flathub
 * Nautilus
 * Terminal Ptxys
 * Configurações básicas do sistema
@@ -55,7 +55,7 @@ Este projeto foi criado para:
 
 ## Atualizando o sistema
 
-```bash
+```bash id="yq8yxv"
 # Verificar atualizações
 sudo bootc upgrade --check
 
@@ -68,33 +68,38 @@ sudo reboot
 
 ## Comandos úteis
 
-```bash
+```bash id="yq0x9j"
 # Ver informações da imagem atual
 bootc status
 
 # Voltar para a imagem anterior
 sudo bootc rollback
-
-# Trocar para outra imagem bootc
-sudo bootc switch imagem:tag
 ```
+
+## Aviso sobre bootc switch
+
+O uso de `bootc switch` a partir do Fedora Silverblue não é suportado neste projeto.
+
+A imagem remove o repositório Fedora Flatpak e utiliza apenas o Flathub, o que pode causar conflitos em sistemas Silverblue já configurados com os Flatpaks padrão do Fedora.
+
+O método recomendado é utilizar a ISO de instalação fornecida pelo projeto.
 
 ## Clonando o projeto
 
-```bash
+```bash id="66d9r8"
 git clone https://github.com/Ferlinuxdebian/bootc-gnome-minimal.git
 cd bootc-gnome-minimal
 ```
 
 ## Build local da imagem
 
-```bash
+```bash id="i8ls7u"
 sudo podman build -t bootc-gnome-minimal -f Containerfile
 ```
 
 ## Gerando a ISO de instalação
 
-```bash
+```bash id="eolam0"
 mkdir output
 
 sudo podman run \
@@ -123,8 +128,6 @@ Para baixar a ISO gerada automaticamente:
 3. Aguarde o build finalizar
 4. Role até a seção `Artifacts`
 5. Baixe o artefato contendo a ISO
-
-A ISO gerada pelo GitHub Actions fica disponível nos artefatos do workflow.
 
 ## Sobre o projeto
 
