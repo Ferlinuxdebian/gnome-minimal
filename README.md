@@ -1,81 +1,102 @@
-# Fedora Bootc Imagem Personalizada
+## Fedora Bootc GNOME Minimal
 
-Este repositório contém a definição da imagem de sistema operacional baseada em **Fedora 44**, construída com `bootc`. O sistema é imutável, voltado para uso desktop com suporte a drivers Nvidia e interface GNOME.
+Este repositório contém uma imagem personalizada baseada no Fedora Project usando o conceito de sistemas imutáveis com bootc.
 
-Além do `bootc`, a imagem utiliza o [chunkah](https://github.com/coreos/chunkah) para otimizar o processo de atualização, dividindo a imagem em camadas adicionais e reduzindo o volume de dados transferidos a cada update do bootc.
+A proposta do projeto é ser simples e didática, ajudando iniciantes a aprender como criar suas próprias imagens de sistema personalizadas com bootc.
 
-## Arquitetura do Projeto
+A imagem utiliza um ambiente GNOME extremamente minimalista, trazendo apenas o básico para iniciar o sistema e permitindo que o próprio usuário escolha os aplicativos que deseja instalar depois.
 
-- **Base:** [fedora-bootc](https://quay.io/repository/fedora/fedora-bootc) (Imagem OCI inicializável Oficial do projeto Fedora)
-- **Interface:** GNOME Shell
-- **Drivers:** Nvidia via repositório Negativo17, incluídos na imagem
-- **Automação:** GitHub Actions com build diário às 03h45 (horário de Brasília)
+## O que acompanha a imagem
 
-## Estrutura de Arquivos
+A instalação inclui apenas:
 
-| Arquivo | Função |
-|---|---|
-| `Containerfile` | Instruções de build da imagem (instalação de pacotes e drivers) |
-| `pacotes_desktop` | Lista de pacotes relacionados à interface gráfica (GNOME, Plasma e afins) |
-| `pacotes_necessarios` | Lista de pacotes essenciais ao sistema, acrescida de pacotes de escolha pessoal |
-| `post-install.sh` | Script de pós-instalação: remove o repositório Fedora Flatpak, adiciona o Flathub e instala os Flatpaks |
-| `.github/workflows` | Arquivo `.yml` responsável pelo build automático via GitHub Actions |
-| `10-nvidia-args.toml` | Parâmetros para colocar o driver `nouveau` no blacklist |
-| `post-install.service` | Serviço systemd que executa o script de pós-instalação no primeiro boot |
-| `vconsole.conf` | Configuração do TTY para pt-BR |
-| `locale.conf` | Configuração de localidade do sistema para pt-BR |
-| `config.toml` | Arquivo de kickstart do Anaconda para geração de ISO de instalação |
-| `zram-generator.conf` | Configura o zram com tamanho igual ao da RAM, usando o algoritmo de compressão zstd |
+* GNOME Shell
+* GNOME Software com suporte ao Flathub
+* Nautilus
+* Terminal com suporte a PT-BR
+* Configurações básicas do sistema
 
-## Ciclo de Atualização
+Aplicativos como navegador, suíte office, players de mídia e outros programas não vêm instalados por padrão.
+A ideia é deixar o sistema limpo e permitir que cada usuário monte seu próprio desktop.
 
-A imagem é reconstruída automaticamente todos os dias às 03h45. Uma notificação via Telegram (integração com o BotFather) é enviada ao final de cada build, indicando sucesso ou falha.
+## Objetivo do projeto
 
-![Notificação Telegram](https://i.imgur.com/5Ip7A1N.png)
+Este projeto foi criado para:
 
-### Atualização manual
+* Aprender sobre bootc
+* Entender como funcionam imagens OCI inicializáveis
+* Criar sistemas personalizados baseados no Fedora
+* Gerar ISOs de instalação próprias
+* Explorar sistemas imutáveis de forma simples
+
+## Base da imagem
+
+* Base: `fedora-bootc`
+* Interface: GNOME Minimal
+* Sistema: Imutável via bootc
+* Distribuição base: Fedora Project
+* Formato de distribuição: Imagem OCI inicializável
+* Instalação: ISO personalizada inclusa no projeto
+
+## Estrutura dos arquivos
+
+| Arquivo                | Função                                          |
+| ---------------------- | ----------------------------------------------- |
+| `Containerfile`        | Define como a imagem é construída               |
+| `pacotes_desktop`      | Lista dos pacotes do ambiente gráfico           |
+| `pacotes_necessarios`  | Pacotes essenciais do sistema                   |
+| `post-install.sh`      | Script executado no primeiro boot               |
+| `post-install.service` | Serviço systemd responsável pelo pós-instalação |
+| `config.toml`          | Configuração usada para gerar a ISO             |
+| `locale.conf`          | Configuração regional pt-BR                     |
+| `vconsole.conf`        | Configuração do terminal TTY                    |
+| `zram-generator.conf`  | Configuração de zram                            |
+| `.github/workflows`    | Automação de builds via GitHub Actions          |
+
+## Atualizando o sistema
 
 ```bash
-# Verificar se há nova imagem disponível
+# Verificar atualizações
 sudo bootc upgrade --check
 
-# Aplicar a atualização
+# Aplicar atualização
 sudo bootc upgrade
 
-# Após reiniciar, verificar o que mudou
-rpm-ostree db diff
-
-# Reiniciar para ativar a nova imagem
+# Reiniciar o sistema
 sudo reboot
 ```
 
-## Comandos de Manutenção
+## Comandos úteis
 
 ```bash
-# Ver a versão atual da imagem
+# Ver informações da imagem atual
 bootc status
 
-# Reverter para a imagem anterior
+# Voltar para a imagem anterior
 sudo bootc rollback
 
-# Migrar para esta imagem (primeira utilização)
-sudo bootc switch container-registry:tag
+# Trocar para outra imagem bootc
+sudo bootc switch imagem:tag
 ```
 
-## Criação de ISO Personalizada
-
-### Build da imagem local
+## Clonando o projeto
 
 ```bash
 git clone https://github.com/Ferlinuxdebian/bootc-gnome-minimal.git
 cd bootc-gnome-minimal
-mkdir output
+```
+
+## Build local da imagem
+
+```bash
 sudo podman build -t bootc-gnome-minimal -f Containerfile
 ```
 
-### Geração da ISO de instalação
+## Gerando a ISO de instalação
 
 ```bash
+mkdir output
+
 sudo podman run \
     --rm \
     -it \
@@ -91,4 +112,28 @@ sudo podman run \
     localhost/bootc-gnome-minimal
 ```
 
-Após a conclusão, o arquivo `output/bootiso/install.iso` estará disponível para uso na instalação do sistema.
+## Localização da ISO
+
+Após o build local, a ISO será criada em:
+
+```bash
+output/bootiso/install.iso
+```
+
+## Download da ISO pelo GitHub Actions
+
+Este repositório também gera automaticamente a ISO através do GitHub Actions.
+
+Para baixar a ISO gerada automaticamente:
+
+1. Abra a aba `Actions` do repositório
+2. Entre no workflow desejado
+3. Aguarde o build finalizar
+4. Role até a seção `Artifacts`
+5. Baixe o artefato contendo a ISO
+
+A ISO gerada pelo GitHub Actions fica disponível nos artefatos do workflow.
+
+## Sobre o projeto
+
+O foco deste repositório não é entregar um sistema cheio de aplicativos prontos, mas sim servir como base de aprendizado para quem deseja entender melhor o ecossistema bootc e começar a criar suas próprias imagens de sistema personalizadas.
