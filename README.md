@@ -97,7 +97,7 @@ cd gnome-minimal
 sudo buildah build \
     --skip-unused-stages=false \
     --security-opt=label=disable \
-    -t "ghcr.io/ferlinuxdebian/gnome-minimal" \
+    -t "gnome-minimal" \
     -f Containerfile \
     -v $(pwd):/run/src \
     .
