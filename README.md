@@ -11,9 +11,9 @@ A imagem utiliza um ambiente GNOME extremamente minimalista, trazendo apenas o b
 A instalação inclui apenas:
 
 * GNOME Shell
-* GNOME Software com suporte ao Flathub
+* GNOME Software com suporte a apenas ao Flathub
 * Nautilus
-* Terminal com suporte a PT-BR
+* Terminal Ptxys
 * Configurações básicas do sistema
 
 Aplicativos como navegador, suíte office, players de mídia e outros programas não vêm instalados por padrão.
