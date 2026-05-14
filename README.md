@@ -112,14 +112,6 @@ sudo podman run \
     localhost/bootc-gnome-minimal
 ```
 
-## Localização da ISO
-
-Após o build local, a ISO será criada em:
-
-```bash
-output/bootiso/install.iso
-```
-
 ## Download da ISO pelo GitHub Actions
 
 Este repositório também gera automaticamente a ISO através do GitHub Actions.
