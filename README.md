@@ -106,7 +106,7 @@ sudo buildah build \
 ## Gerando a ISO de instalação
 
 ```bash id="eolam0"
-mkdir output
+mkdir -p output
 
 sudo podman run \
     --rm \
