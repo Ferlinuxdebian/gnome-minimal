@@ -36,14 +36,16 @@ jobs:
       - name: Extrair Versão da Imagem Base
         id: base_version
         run: |
-          VERSION=$(grep '^FROM' Containerfile | head -n 1 | awk -F: '{print $2}' | awk '{print $1}')
+          # Extrai a versão após o ':' e remove espaços/comentários
+          VERSION=$(grep -m 1 '^FROM' Containerfile | sed 's/.*://' | awk '{print $1}')
+          if [ -z "$VERSION" ]; then VERSION="latest"; fi
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Gerar Timestamp (Horário de Brasília)
         id: timestamp
         run: echo "date=$(TZ='America/Sao_Paulo' date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
 
-      - name: Login no GitHub Container Registry via Buildah
+      - name: Login no GitHub Container Registry
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login \
             -u ${{ github.actor }} \
@@ -64,8 +66,9 @@ jobs:
         run: |
           SOURCE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-${{ steps.timestamp.outputs.date }}"
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          VERSION="${{ steps.base_version.outputs.version }}"
 
-          sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-latest"
+          sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-latest"
           sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
           sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main"
           sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${SHORT_SHA}"
@@ -80,3 +83,61 @@ jobs:
             echo "→ Pushing ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
             sudo buildah push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
           done
+
+      - name: Criar config.toml para o Builder
+        run: |
+          cat <<EOF > config.toml
+          [customizations.installer.modules]
+          enable = [
+            "org.fedoraproject.Anaconda.Modules.Storage",
+            "org.fedoraproject.Anaconda.Modules.Users",
+            "org.fedoraproject.Anaconda.Modules.Network",
+            "org.fedoraproject.Anaconda.Modules.Timezone"
+          ]
+
+          [customizations.installer.kickstart]
+          contents = """
+          clearpart --all --initlabel
+          zerombr
+
+          # EFI
+          part /boot/efi --fstype=efi --size=600 --fsoptions="umask=0077,shortname=winnt"
+
+          # /boot
+          part /boot --fstype=ext4 --size=2048
+
+          # Particao Btrfs unica
+          part btrfs.01 --fstype=btrfs --grow
+
+          # Volume Btrfs
+          btrfs none --label=fedora btrfs.01
+
+          # Subvolumes
+          btrfs /     --subvol --name=root LABEL=fedora
+          btrfs /var  --subvol --name=var  LABEL=fedora
+          btrfs /home --subvol --name=home LABEL=fedora
+          """
+          EOF
+
+      - name: Gerar ISO via Bootc Image Builder
+        run: |
+          mkdir -p ./output
+          sudo podman run \
+            --rm \
+            --privileged \
+            --pull=newer \
+            --security-opt label=type:unconfined_t \
+            -v ./output:/output \
+            -v ./config.toml:/config.toml:ro \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type anaconda-iso \
+            --rootfs btrfs \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Upload da ISO como Artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnome-minimal-iso-${{ steps.timestamp.outputs.date }}
+          path: ./output/anaconda/install.iso
+          retention-days: 5
