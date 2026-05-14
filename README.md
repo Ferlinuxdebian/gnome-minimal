@@ -14,7 +14,8 @@ A instalação inclui apenas:
 * GNOME Software com suporte ao Flathub
 * Nautilus
 * Terminal Ptxys
-* Configurações básicas do sistema
+* Distrobox
+* Toolbox
 
 Aplicativos como navegador, suíte office, players de mídia e outros programas não vêm instalados por padrão.
 A ideia é deixar o sistema limpo e permitir que cada usuário monte seu próprio desktop.
