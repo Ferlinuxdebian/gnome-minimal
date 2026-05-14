@@ -1,4 +1,4 @@
-name: Build e Push da Imagem Bootc e ISO
+name: Build e Push da Imagem Bootc
 on:
   schedule:
     - cron: '45 6 * * *'
@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }} # Usa automaticamente seu usuário/nome-do-repo
+  IMAGE_NAME: ferlinuxdebian/gnome-minimal
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -20,16 +20,9 @@ jobs:
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
-
-      - name: Liberar espaço no disco (Disk Cleanup)
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /usr/lib/jvm
-          sudo apt-get clean
-          df -h
 
       - name: Extrair Versão da Imagem Base
         id: base_version
@@ -37,63 +30,44 @@ jobs:
           VERSION=$(grep '^FROM' Containerfile | head -n 1 | awk -F: '{print $2}' | awk '{print $1}')
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Gerar Timestamp
+      - name: Gerar Timestamp (Horário de Brasília)
         id: timestamp
         run: echo "date=$(TZ='America/Sao_Paulo' date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
 
-      - name: Login no GitHub Container Registry
+      - name: Login no GitHub Container Registry via Buildah
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login \
             -u ${{ github.actor }} \
             --password-stdin \
             ${{ env.REGISTRY }}
 
-      - name: Build da Imagem
+      - name: Build da Imagem com Buildah
         run: |
           sudo buildah build \
             --skip-unused-stages=false \
             --security-opt=label=disable \
             -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-${{ steps.timestamp.outputs.date }}" \
             -f Containerfile \
+            -v $(pwd):/run/src \
             .
 
-      - name: Aplicar Tags e Push
+      - name: Aplicar Tags Adicionais
         run: |
-          VERSION="${{ steps.base_version.outputs.version }}"
-          DATE="${{ steps.timestamp.outputs.date }}"
-          SOURCE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-${DATE}"
+          SOURCE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-${{ steps.timestamp.outputs.date }}"
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
 
-          # Criando as tags localmente com sudo
-          sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-latest"
+          sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-latest"
           sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main"
           sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${SHORT_SHA}"
 
-          # Push manual forçando o uso das credenciais do sudo
-          for TAG in "${VERSION}-${DATE}" "${VERSION}-latest" "latest" "sha-${SHORT_SHA}"; do
-            echo "→ Pushing tag: ${TAG}"
+      - name: Push de Todas as Tags
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          VERSION="${{ steps.base_version.outputs.version }}"
+          DATE="${{ steps.timestamp.outputs.date }}"
+
+          for TAG in "${VERSION}-${DATE}" "${VERSION}-latest" "latest" "main" "sha-${SHORT_SHA}"; do
+            echo "→ Pushing ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
             sudo buildah push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TAG}"
           done
-
-      - name: Gerar ISO com Bootc Image Builder
-        run: |
-          mkdir -p ./output
-          touch config.toml 
-          sudo podman run \
-            --rm \
-            --privileged \
-            --pull=newer \
-            --security-opt label=disable \
-            -v ./output:/output \
-            -v ./config.toml:/config.toml:ro \
-            -v /var/lib/containers/storage:/var/lib/containers/storage \
-            quay.io/centos-bootc/bootc-image-builder:latest \
-            --type anaconda-iso \
-            --rootfs btrfs \
-            "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
-      - name: Upload da ISO
-        uses: actions/upload-artifact@v4
-        with:
-          name: bootc-iso-${{ steps.timestamp.outputs.date }}
-          path: ./output/bootc-gnome-minimal.iso
