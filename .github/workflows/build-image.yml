@@ -119,25 +119,44 @@ jobs:
           """
           EOF
 
-      - name: Gerar ISO via Bootc Image Builder
+      - name: Criar config.toml e Gerar ISO
         run: |
+          cat <<EOF > config.toml
+          [customizations.installer.modules]
+          enable = ["org.fedoraproject.Anaconda.Modules.Storage", "org.fedoraproject.Anaconda.Modules.Users", "org.fedoraproject.Anaconda.Modules.Network", "org.fedoraproject.Anaconda.Modules.Timezone"]
+          [customizations.installer.kickstart]
+          contents = """
+          clearpart --all --initlabel
+          zerombr
+          part /boot/efi --fstype=efi --size=600 --fsoptions="umask=0077,shortname=winnt"
+          part /boot --fstype=ext4 --size=2048
+          part btrfs.01 --fstype=btrfs --grow
+          btrfs none --label=fedora btrfs.01
+          btrfs /     --subvol --name=root LABEL=fedora
+          btrfs /var  --subvol --name=var  LABEL=fedora
+          btrfs /home --subvol --name=home LABEL=fedora
+          """
+          EOF
+          
           mkdir -p ./output
           sudo podman run \
-            --rm \
-            --privileged \
-            --pull=newer \
+            --rm --privileged --pull=newer \
             --security-opt label=type:unconfined_t \
             -v ./output:/output \
             -v ./config.toml:/config.toml:ro \
             -v /var/lib/containers/storage:/var/lib/containers/storage \
             quay.io/centos-bootc/bootc-image-builder:latest \
-            --type anaconda-iso \
-            --rootfs btrfs \
+            --type anaconda-iso --rootfs btrfs \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
 
-      - name: Upload da ISO como Artefato
+          # CRITICAL: Ajustar permissões para que o GitHub Action consiga ler o arquivo criado pelo root
+          sudo chown -R $USER:$USER ./output
+
+      - name: Upload da ISO (Busca Recursiva)
         uses: actions/upload-artifact@v4
         with:
-          name: gnome-minimal-iso-${{ steps.timestamp.outputs.date }}
-          path: ./output/anaconda/install.iso
+          name: gnome-minimal-iso
+          # Usamos o wildcard ** para encontrar a ISO independente da subpasta (anaconda/ ou iso/)
+          path: ./output/**/install.iso
           retention-days: 5
+          if-no-files-found: error
