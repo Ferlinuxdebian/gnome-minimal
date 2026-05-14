@@ -87,14 +87,14 @@ O método recomendado é utilizar a ISO de instalação fornecida pelo projeto.
 ## Clonando o projeto
 
 ```bash id="66d9r8"
-git clone https://github.com/Ferlinuxdebian/bootc-gnome-minimal.git
-cd bootc-gnome-minimal
+git clone https://github.com/Ferlinuxdebian/gnome-minimal.git
+cd gnome-minimal
 ```
 
 ## Build local da imagem
 
 ```bash id="i8ls7u"
-sudo podman build -t bootc-gnome-minimal -f Containerfile
+sudo podman build -t gnome-minimal -f Containerfile
 ```
 
 ## Gerando a ISO de instalação
@@ -114,7 +114,7 @@ sudo podman run \
     quay.io/centos-bootc/bootc-image-builder:latest \
     --type anaconda-iso \
     --rootfs btrfs \
-    localhost/bootc-gnome-minimal
+    localhost/gnome-minimal
 ```
 
 ## Download da ISO pelo GitHub Actions
