@@ -1,131 +1,65 @@
-name: Build e Push da Imagem Bootc
-on:
-  schedule:
-    - cron: '45 6 * * *'
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - 'README.md'
-  workflow_dispatch:
+# Imagem base única (não precisa mais de multi-stage builder para drivers)
+FROM quay.io/fedora/fedora-bootc:44 AS final
+LABEL ostree.bootable="true"
+LABEL containers.bootc="1"
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ferlinuxdebian/gnome-minimal
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+# Copia apenas os arquivos necessários (removido scripts e configs da NVIDIA)
+COPY locale.conf post-install.sh pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf ./
 
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
+RUN mkdir -vp /var/roothome /data /var/home && \
+    dnf5 -y upgrade --refresh && \
+    dnf5 -y install kernel-modules-extra --refresh && \
+    # Otimização do Dracut para remover módulos NFS desnecessários
+    printf 'omit_dracutmodules+=" nfs "\nomit_drivers+=" nfs nfsv3 nfsv4 nfs_acl nfs_common sunrpc rxrpc rpcrdma auth_rpcgss rpcsec_gss_krb5 "\n' | tee /etc/dracut.conf.d/no-nfs.conf >/dev/null && \
+    kver="$(rpm -q kernel-core --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
+    dracut -f /usr/lib/modules/${kver}/initramfs.img ${kver} && \
+    dnf5 -y install wget && \
+    # Configurações de sistema
+    mv -v zram-generator.conf /etc/systemd/ && \
+    mv -v vconsole.conf /etc/vconsole.conf && \
+    mv -v locale.conf /etc/locale.conf && \
+    # Organização de diretórios e links simbólicos para persistência
+    rm -rvf /opt && mkdir -vp /var/opt && ln -vs /var/opt /opt && \
+    mkdir -vp /var/usrlocal && mv -v /usr/local/* /var/usrlocal/ 2>/dev/null && \
+    rm -rvf /usr/local && ln -vs /var/usrlocal /usr/local && \
+    # Script de pós-instalação
+    mv -v post-install.sh /usr/bin/post-install.sh && \
+    mv -v post-install.service /usr/lib/systemd/system/post-install.service && \
+    chmod +x /usr/bin/post-install.sh && \
+    systemctl enable post-install.service && \
+    dnf5 clean all && \
+    rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
-      - name: Liberar Espaço em Disco (Maximize Space)
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          df -h
+# Instalação do gnome-shell minimalista
+RUN dnf5 install gnome-shell --setopt=install_weak_deps=False -y && \
+    dnf5 install gnome-software --setopt=install_weak_deps=False -y && \
+    dnf5 clean all && \
+    rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
-      - name: Extrair Versão da Imagem Base
-        id: base_version
-        run: |
-          VERSION=$(grep '^FROM' Containerfile | head -n 1 | awk -F: '{print $2}' | awk '{print $1}')
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+# Instalação dos pacotes definidos nos arquivos de lista
+RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install -y && \
+    grep -v '^#' pacotes_desktop | tr '\n' ' ' | xargs dnf5 install -y && \
+    systemctl mask systemd-remount-fs.service && \
+    systemctl enable libvirtd.service && \
+    systemctl enable spice-vdagentd.service && \
+    dnf5 clean all && \
+    rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/* \
+    /var/usrlocal/share/applications/mimeinfo.cache \
+    /var/roothome/.*
 
-      - name: Gerar Timestamp (Horário de Brasília)
-        id: timestamp
-        run: echo "date=$(TZ='America/Sao_Paulo' date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
+# Verificação da imagem
+RUN bootc container lint
 
-      - name: Login no GitHub Container Registry via Buildah
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login \
-            -u ${{ github.actor }} \
-            --password-stdin \
-            ${{ env.REGISTRY }}
+# Estágio final de otimização com Chunkah
+FROM quay.io/coreos/chunkah AS chunkah
+ARG CHUNKAH_CONFIG_STR
+RUN --mount=from=final,src=/,target=/chunkah,ro \
+    --mount=type=bind,target=/run/src,rw \
+    chunkah build --max-layers 128 \
+    --label ostree.commit- \
+    --label ostree.final-diffid- \
+    > /run/src/out.ociarchive
 
-      - name: Build da Imagem com Buildah
-        run: |
-          sudo buildah build \
-            --skip-unused-stages=false \
-            --security-opt=label=disable \
-            -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-${{ steps.timestamp.outputs.date }}" \
-            -f Containerfile \
-            -v $(pwd):/run/src \
-            .
-
-      - name: Aplicar Tags Adicionais
-        run: |
-          SOURCE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-${{ steps.timestamp.outputs.date }}"
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-latest"
-          sudo buildah tag "${SOURCE}" "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
-      - name: Push de Imagens
-        run: |
-          sudo buildah push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.base_version.outputs.version }}-${{ steps.timestamp.outputs.date }}"
-          sudo buildah push "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-
-      - name: Criar config.toml para o Builder
-        run: |
-          cat <<EOF > config.toml
-          [customizations.installer.modules]
-          enable = [
-            "org.fedoraproject.Anaconda.Modules.Storage",
-            "org.fedoraproject.Anaconda.Modules.Users",
-            "org.fedoraproject.Anaconda.Modules.Network",
-            "org.fedoraproject.Anaconda.Modules.Timezone"
-          ]
-
-          [customizations.installer.kickstart]
-          contents = """
-          clearpart --all --initlabel
-          zerombr
-
-          # EFI
-          part /boot/efi --fstype=efi --size=600 --fsoptions="umask=0077,shortname=winnt"
-
-          # /boot
-          part /boot --fstype=ext4 --size=2048
-
-          # Particao Btrfs unica
-          part btrfs.01 --fstype=btrfs --grow
-
-          # Volume Btrfs
-          btrfs none --label=fedora btrfs.01
-
-          # Subvolumes
-          btrfs /     --subvol --name=root LABEL=fedora
-          btrfs /var  --subvol --name=var  LABEL=fedora
-          btrfs /home --subvol --name=home LABEL=fedora
-          """
-          EOF
-
-      - name: Gerar ISO via Bootc Image Builder
-        run: |
-          mkdir -p ./output
-          sudo podman run \
-            --rm \
-            --privileged \
-            --pull=newer \
-            --security-opt label=type:unconfined_t \
-            -v ./output:/output \
-            -v ./config.toml:/config.toml:ro \
-            -v /var/lib/containers/storage:/var/lib/containers/storage \
-            quay.io/centos-bootc/bootc-image-builder:latest \
-            --type anaconda-iso \
-            --rootfs btrfs \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-
-      - name: Upload da ISO como Artefato
-        uses: actions/upload-artifact@v4
-        with:
-          name: gnome-minimal-iso-${{ steps.timestamp.outputs.date }}
-          path: ./output/anaconda/install.iso
-          retention-days: 5
+FROM oci-archive:out.ociarchive
+LABEL ostree.bootable="true"
+LABEL containers.bootc="1"
