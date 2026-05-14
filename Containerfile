@@ -40,8 +40,6 @@ RUN dnf5 install gnome-shell --setopt=install_weak_deps=False -y && \
 RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install -y && \
     grep -v '^#' pacotes_desktop | tr '\n' ' ' | xargs dnf5 install -y && \
     systemctl mask systemd-remount-fs.service && \
-    systemctl mask akmods-keygen@akmods-keygen.service && \
-    systemctl enable libvirtd.service && \
     systemctl enable spice-vdagentd.service && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/* \
