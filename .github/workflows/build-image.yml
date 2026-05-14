@@ -74,7 +74,6 @@ jobs:
       - name: Gerar ISO com Bootc Image Builder
         run: |
           mkdir -p ./output
-          # Garantir que o config.toml exista para evitar erro de montagem
           touch config.toml 
           
           sudo podman run \
@@ -96,26 +95,3 @@ jobs:
           name: bootc-gnome-iso-${{ steps.timestamp.outputs.date }}
           path: ./output/bootc-gnome-minimal.iso
           if-no-files-found: warn
-
-      - name: Notificar Sucesso no Telegram
-        if: success()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_TO }}
-          token: ${{ secrets.TELEGRAM_TOKEN }}
-          message: |
-            ✅ Rebuild e ISO concluídos!
-            Base: ${{ steps.base_version.outputs.version }}
-            Tag: ${{ steps.base_version.outputs.version }}-${{ steps.timestamp.outputs.date }}
-            ISO gerada com sucesso.
-
-      - name: Notificar Falha no Telegram
-        if: failure()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_TO }}
-          token: ${{ secrets.TELEGRAM_TOKEN }}
-          message: |
-            ❌ Erro no Build/ISO!
-            Base: ${{ steps.base_version.outputs.version }}
-            Link: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
