@@ -129,6 +129,8 @@ Para baixar a ISO gerada automaticamente:
 4. Role até a seção `Artifacts`
 5. Baixe o artefato contendo a ISO
 
+![Fedora Bootc GNOME Minimal](https://i.imgur.com/cYXwJIl.png)
+
 ## Sobre o projeto
 
 O foco deste repositório não é entregar um sistema cheio de aplicativos prontos, mas sim servir como base de aprendizado para quem deseja entender melhor o ecossistema bootc e começar a criar suas próprias imagens de sistema personalizadas.
