@@ -20,6 +20,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
 
     steps:
       - name: Checkout do código
@@ -46,12 +47,12 @@ jobs:
         id: timestamp
         run: echo "date=$(TZ='America/Sao_Paulo' date +'%Y%m%d-%H%M')" >> $GITHUB_OUTPUT
 
-      - name: Login no GitHub Container Registry via Buildah
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo buildah login \
-            -u ${{ github.actor }} \
-            --password-stdin \
-            ${{ env.REGISTRY }}
+      - name: Login no GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build da Imagem com Buildah
         run: |
