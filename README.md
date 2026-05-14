@@ -94,7 +94,13 @@ cd gnome-minimal
 ## Build local da imagem
 
 ```bash id="i8ls7u"
-sudo podman build -t gnome-minimal -f Containerfile
+sudo buildah build \
+    --skip-unused-stages=false \
+    --security-opt=label=disable \
+    -t "ghcr.io/ferlinuxdebian/gnome-minimal" \
+    -f Containerfile \
+    -v $(pwd):/run/src \
+    .
 ```
 
 ## Gerando a ISO de instalação
