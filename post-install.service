@@ -2,6 +2,7 @@
 # Instala vários apps flatpaks
 [Unit]
 Description=Bootstrap de Flatpaks iniciais
+ConditionPathExists=!/var/lib/flatpak/app
 After=network-online.target
 Wants=network-online.target
 
