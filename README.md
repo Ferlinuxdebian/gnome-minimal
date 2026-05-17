@@ -79,11 +79,9 @@ sudo bootc rollback
 
 ## Aviso sobre bootc switch
 
-O uso de `bootc switch` a partir do Fedora Silverblue não é suportado neste projeto.
+Agora é possível realizar o bootc switch diretamente a partir do Fedora Silverblue para esta imagem.
 
-A imagem remove o repositório Fedora Flatpak e utiliza apenas o Flathub, o que pode causar conflitos em sistemas Silverblue já configurados com os Flatpaks padrão do Fedora.
-
-O método recomendado é utilizar a ISO de instalação fornecida pelo projeto.
+sudo bootc switch ghcr.io/ferlinuxdebian/gnome-minimal:latest
 
 ## Clonando o projeto
 
