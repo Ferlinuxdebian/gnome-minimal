@@ -81,7 +81,9 @@ sudo bootc rollback
 
 Agora é possível realizar o bootc switch diretamente a partir do Fedora Silverblue para esta imagem.
 
+```
 sudo bootc switch ghcr.io/ferlinuxdebian/gnome-minimal:latest
+```
 
 ## Clonando o projeto
 
