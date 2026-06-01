@@ -11,7 +11,7 @@ A imagem utiliza um ambiente GNOME extremamente minimalista, trazendo apenas o b
 A instalação inclui apenas:
 
 * GNOME Shell
-* GNOME Software com suporte ao Flathub
+* A loja de software é o Bazaar (flatpak)
 * Nautilus
 * Terminal Ptxys
 * Distrobox
