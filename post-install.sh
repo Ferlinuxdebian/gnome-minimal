@@ -7,4 +7,7 @@ sleep 2
 flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 fi
 
-flatpak install flathub io.github.kolunmi.Bazaar -y
+flatpak install -y flathub \
+io.github.kolunmi.Bazaar \
+org.mozilla.firefox \
+com.mattjakeman.ExtensionManager
