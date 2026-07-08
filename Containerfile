@@ -19,6 +19,7 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     mv -v vconsole.conf /etc/vconsole.conf && \
     mv -v locale.conf /etc/locale.conf && \
     # Organização de diretórios e links simbólicos para persistência
+    rm -rvf /opt && mkdir -vp /var/opt && ln -vs /var/opt /opt && \
     mkdir -vp /var/usrlocal && mv -v /usr/local/* /var/usrlocal/ 2>/dev/null && \
     rm -rvf /usr/local && ln -vs /var/usrlocal /usr/local && \
     # Script de pós-instalação
@@ -26,12 +27,6 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     mv -v post-install.service /usr/lib/systemd/system/post-install.service && \
     chmod +x /usr/bin/post-install.sh && \
     systemctl enable post-install.service && \
-    # instalação do FortiClient
-    rm -rvf /opt && mkdir -vp /usr/opt && ln -vs /usr/opt /opt && \
-    wget -O /etc/yum.repos.d/fortinet.repo \
-    https://repo.fortinet.com/repo/forticlient/8.0/el/os/x86_64/fortinet.repo && \
-    dnf -y install forticlient && \
-    # limpeza final
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
