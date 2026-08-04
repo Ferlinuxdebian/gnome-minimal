@@ -3,6 +3,7 @@ evince-thumbnailer
 ibus-typing-booster
 glycin-thumbnailer
 gnome-epub-thumbnailer
+evince-thumbnailer
 adw-gtk3-theme
 libnma
 ibus-typing-booster
@@ -12,6 +13,9 @@ nautilus
 ptyxis
 gnome-backgrounds
 f44-backgrounds-gnome
+
+# Gnome minimo
+"gnome-shell --setopt=install_weak_deps=False --setopt=tsflags=nodocs"
 
 # Plymounth Firula torna o boot agradável
 plymouth

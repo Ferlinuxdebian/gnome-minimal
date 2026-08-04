@@ -1,21 +1,13 @@
 # Imagem base única (não precisa mais de multi-stage builder para drivers)
-FROM quay.io/fedora/fedora-bootc:44 AS final
-LABEL ostree.bootable="true"
-LABEL containers.bootc="1"
-
+FROM quay.io/fedora/fedora-bootc:44 
 # Copia apenas os arquivos necessários (removido scripts e configs da NVIDIA)
 COPY locale.conf post-install.sh pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf ./
 
 RUN mkdir -vp /var/roothome /data /var/home && \
-    dnf5 -y upgrade --refresh && \
-    dnf5 -y install kernel-modules-extra --refresh && \
-    # Otimização do Dracut para remover módulos NFS desnecessários
-    printf 'omit_dracutmodules+=" nfs "\nomit_drivers+=" nfs nfsv3 nfsv4 nfs_acl nfs_common sunrpc rxrpc rpcrdma auth_rpcgss rpcsec_gss_krb5 "\n' | tee /etc/dracut.conf.d/no-nfs.conf >/dev/null && \
-    kver="$(rpm -q kernel-core --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
-    dracut -f /usr/lib/modules/${kver}/initramfs.img ${kver} && \
-    dnf5 -y install wget && \
+    dnf5 -y upgrade --refresh --setopt=tsflags=nodocs && \
+    dnf5 -y install kernel-modules-extra wget --refresh --setopt=tsflags=nodocs && \
     # Configurações de sistema
-    mv -v zram-generator.conf /etc/systemd/ && \
+    mv -v zram-generator.conf /usr/lib/systemd/zram-generator.conf.d/10-zram.conf || mv -v zram-generator.conf /etc/systemd/ && \
     mv -v vconsole.conf /etc/vconsole.conf && \
     mv -v locale.conf /etc/locale.conf && \
     # Organização de diretórios e links simbólicos para persistência
@@ -30,14 +22,9 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
-# Instalação do gnome-shell minimalista
-RUN dnf5 install gnome-shell --setopt=install_weak_deps=False -y && \
-    dnf5 clean all && \
-    rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
-
 # Instalação dos pacotes definidos nos arquivos de lista
-RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install -y && \
-    grep -v '^#' pacotes_desktop | tr '\n' ' ' | xargs dnf5 install -y && \
+RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
+    grep -v '^#' pacotes_desktop | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
     systemctl mask systemd-remount-fs.service && \
     systemctl enable spice-vdagentd.service && \
     dnf5 clean all && \
@@ -47,17 +34,3 @@ RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install -y && \
 
 # Verificação da imagem
 RUN bootc container lint
-
-# Estágio final de otimização com Chunkah
-FROM quay.io/coreos/chunkah AS chunkah
-ARG CHUNKAH_CONFIG_STR
-RUN --mount=from=final,src=/,target=/chunkah,ro \
-    --mount=type=bind,target=/run/src,rw \
-    chunkah build --max-layers 128 \
-    --label ostree.commit- \
-    --label ostree.final-diffid- \
-    > /run/src/out.ociarchive
-
-FROM oci-archive:out.ociarchive
-LABEL ostree.bootable="true"
-LABEL containers.bootc="1"
