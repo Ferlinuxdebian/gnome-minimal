@@ -27,7 +27,4 @@ btrfs none --label=fedora btrfs.01
 btrfs /     --subvol --name=root LABEL=fedora
 btrfs /var  --subvol --name=var  LABEL=fedora
 btrfs /home --subvol --name=home LABEL=fedora
-btrfs /var/lib/flatpak --subvol --name=flatpak LABEL=fedora
-btrfs /etc/libvirt/  --subvol --name=etc-libvirt LABEL=fedora
-btrfs /var/lib/libvirt/  --subvol --name=libvirt LABEL=fedora
 """

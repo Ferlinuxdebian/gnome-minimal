@@ -29,6 +29,7 @@ jobs:
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
             "/usr/local/share/boost" "$AGENT_TOOLSDIRECTORY"
+          df -h
 
       - name: Gerar metadados do build
         id: meta
@@ -85,3 +86,61 @@ jobs:
               "docker://${{ steps.meta.outputs.primary }}" \
               "docker://${BASE}:${TAG}"
           done
+
+      - name: Criar config.toml para o Builder
+        run: |
+          cat <<EOF > config.toml
+          [customizations.installer.modules]
+          enable = [
+            "org.fedoraproject.Anaconda.Modules.Storage",
+            "org.fedoraproject.Anaconda.Modules.Users",
+            "org.fedoraproject.Anaconda.Modules.Network",
+            "org.fedoraproject.Anaconda.Modules.Timezone"
+          ]
+
+          [customizations.installer.kickstart]
+          contents = """
+          clearpart --all --initlabel
+          zerombr
+
+          # EFI
+          part /boot/efi --fstype=efi --size=600 --fsoptions="umask=0077,shortname=winnt"
+
+          # /boot
+          part /boot --fstype=ext4 --size=2048
+
+          # Partição Btrfs única
+          part btrfs.01 --fstype=btrfs --grow
+
+          # Volume Btrfs
+          btrfs none --label=fedora btrfs.01
+
+          # Subvolumes
+          btrfs /     --subvol --name=root LABEL=fedora
+          btrfs /var  --subvol --name=var  LABEL=fedora
+          btrfs /home --subvol --name=home LABEL=fedora
+          """
+          EOF
+
+      - name: Gerar ISO de instalação
+        run: |
+          mkdir -p ./output
+          sudo podman run \
+            --rm --privileged \
+            --security-opt label=type:unconfined_t \
+            -v ./output:/output \
+            -v ./config.toml:/config.toml:ro \
+            -v /var/lib/containers/storage:/var/lib/containers/storage \
+            quay.io/centos-bootc/bootc-image-builder:latest \
+            --type anaconda-iso --rootfs btrfs \
+            "${{ steps.meta.outputs.primary }}"
+
+          sudo chown -R $USER:$USER ./output
+
+      - name: Upload da ISO como Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gnome-minimal-iso
+          path: ./output/**/install.iso
+          retention-days: 5
+          if-no-files-found: error
