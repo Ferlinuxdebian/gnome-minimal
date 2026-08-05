@@ -12,6 +12,8 @@ A instalação inclui apenas:
 
 * GNOME Shell
 * A loja de software é o Bazaar (flatpak)
+* Firefox (flatpak)
+* Extension Manager (Flatpak)
 * Nautilus
 * Terminal Ptxys
 * Distrobox
