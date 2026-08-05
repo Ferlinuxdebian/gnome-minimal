@@ -1,6 +1,5 @@
-# Imagem base única (não precisa mais de multi-stage builder para drivers)
+# Imagem única para montar uma instalação mínima do Fedora 44 com interface gráfica GNOME
 FROM quay.io/fedora/fedora-bootc:44 
-# Copia apenas os arquivos necessários (removido scripts e configs da NVIDIA)
 COPY locale.conf post-install.sh pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf ./
 
 RUN mkdir -vp /var/roothome /data /var/home && \
