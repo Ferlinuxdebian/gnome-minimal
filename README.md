@@ -19,7 +19,7 @@ A instalação inclui apenas:
 * Distrobox
 * Toolbox
 
-Aplicativos como navegador, suíte office, players de mídia e outros programas não vêm instalados por padrão.
+Aplicativos como, suíte office, players de mídia e outros programas não vêm instalados por padrão.
 A ideia é deixar o sistema limpo e permitir que cada usuário monte seu próprio desktop.
 
 ## Objetivo do projeto
