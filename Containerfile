@@ -1,6 +1,6 @@
 # Imagem única para montar uma instalação mínima do Fedora 45 com interface gráfica GNOME
 FROM quay.io/fedora/fedora-bootc:45
-COPY locale.conf flatpaks.preinstall pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf 10-btrfs-compress.toml ppd_base_profile ./
+COPY locale.conf flatpaks.preinstall pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf 10-btrfs-compress.toml tuned-log.conf ./
 
 RUN mkdir -vp /var/roothome /data /var/home && \
     dnf5 -y upgrade --refresh --setopt=tsflags=nodocs && \
@@ -20,6 +20,8 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     install -Dm644 post-install.service /usr/lib/systemd/system/post-install.service && \
     # Compressão btrfs na raiz
     install -Dm644 10-btrfs-compress.toml /usr/lib/bootc/kargs.d/10-btrfs-compress.toml && \
+    # Diretório de log do tuned-ppd com o contexto SELinux correto em todo boot
+    install -Dm644 tuned-log.conf /usr/lib/tmpfiles.d/tuned-log.conf && \
     systemctl enable post-install.service && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
@@ -35,9 +37,6 @@ RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt
     grep -v '^#' pacotes_desktop | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
     systemctl mask systemd-remount-fs.service && \
     systemctl enable spice-vdagentd.service tuned.service tuned-ppd.service && \
-    # Perfil PPD padrão válido. Sem isso, um ppd_base_profile vazio/corrompido
-    # faz o tuned-ppd sair com KeyError (issue 849 do TuneD).
-    install -Dm644 ppd_base_profile /etc/tuned/ppd_base_profile && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/* \
     /var/usrlocal/share/applications/mimeinfo.cache \

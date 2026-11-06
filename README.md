@@ -147,7 +147,7 @@ mudar a lista.
 ├── flatpaks.preinstall               # lista de apps do primeiro boot
 ├── post-install.service              # roda o flatpak preinstall no boot
 ├── 10-btrfs-compress.toml            # karg de compressão btrfs
-├── ppd_base_profile                  # perfil PPD padrão (balanced)
+├── tuned-log.conf                    # tmpfiles.d do log do tuned-ppd
 ├── locale.conf                       # idioma e formato regional
 ├── vconsole.conf                     # teclado e console
 ├── zram-generator.conf               # swap comprimido na RAM
@@ -162,7 +162,7 @@ mudar a lista.
 | `flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
 | `post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
 | `10-btrfs-compress.toml` | Karg que ativa compressão `zstd:1` no btrfs da raiz |
-| `ppd_base_profile` | Perfil PPD padrão gravado em `/etc/tuned/ppd_base_profile` |
+| `tuned-log.conf` | tmpfiles.d que cria e rotula `/var/log/tuned` a cada boot |
 | `locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
 | `vconsole.conf` | Layout de teclado do console |
 | `zram-generator.conf` | Cria swap comprimido em RAM |
@@ -188,7 +188,8 @@ preparada para `bootc`.
 
 ```dockerfile
 COPY locale.conf flatpaks.preinstall pacotes_desktop pacotes_necessarios \
-     post-install.service vconsole.conf zram-generator.conf ./
+     post-install.service vconsole.conf zram-generator.conf \
+     10-btrfs-compress.toml tuned-log.conf ./
 ```
 
 Copia os arquivos do repositório para dentro do build. Depois eles são movidos
@@ -261,15 +262,24 @@ continuam sem compressão até serem reescritos.
 
 A imagem inclui `tuned` e `tuned-ppd` e habilita os dois serviços.
 
-O `tuned-ppd` guarda o último perfil usado em `/etc/tuned/ppd_base_profile`
-e o restaura no boot seguinte. Se esse arquivo ficar com conteúdo inválido —
-por exemplo, vazio ou com bytes NUL após um desligamento abrupto da VM — o
-serviço sai com `KeyError` e status 1. É um bug conhecido do TuneD
-([issue 849](https://github.com/redhat-performance/tuned/issues/849)).
+O `tuned-ppd` grava o log em `/var/log/tuned/tuned-ppd.log`. Esse diretório
+precisa ter o contexto SELinux `tuned_log_t`. O RPM do `tuned` entrega o
+diretório, mas `/var` é criado na instalação e persiste entre atualizações —
+se o diretório for recriado em runtime, nasce como `var_log_t` e o serviço
+falha ao escrever o log (sai com status 1).
 
-Para evitar isso, a imagem grava `balanced` em `/etc/tuned/ppd_base_profile`
-durante o build (arquivo `ppd_base_profile`). Assim o serviço sempre encontra
-um perfil PPD válido (`power-saver`, `balanced` ou `performance`).
+Para resolver isso de forma permanente, o arquivo `tuned-log.conf` é
+instalado em `/usr/lib/tmpfiles.d/`:
+
+```text
+d /var/log/tuned 0755 root root -
+Z /var/log/tuned - - - -
+```
+
+O `systemd-tmpfiles` roda a cada boot antes dos serviços: o `d` garante que o
+diretório exista e o `Z` reaplica o contexto correto (`tuned_log_t`). Como o
+arquivo vem da imagem, a correção também vale para máquinas que apenas fazem
+`bootc upgrade`.
 
 ---
 
@@ -341,6 +351,7 @@ dnf5 search nome-do-pacote
 - **Flatpaks do primeiro boot:** `flatpaks.preinstall` (lista) e
   `post-install.service` (quem executa)
 - **Argumentos de kernel:** `10-btrfs-compress.toml` (compressão btrfs)
+- **Log do `tuned-ppd`:** `tuned-log.conf` (diretório e contexto SELinux)
 - **Arquivos novos:** adicione um `COPY` no `Containerfile` e mova o arquivo
   para o destino final dentro de um `RUN`
 
@@ -504,14 +515,21 @@ No menu do bootloader, selecione a entrada anterior, ou rode
 `sudo bootc rollback` a partir de um sistema de recuperação.
 
 **`tuned-ppd.service` aparece como failed**
-Na maioria dos casos é o bug do `/etc/tuned/ppd_base_profile` com conteúdo
-inválido (vazio ou com bytes NUL após desligamento abrupto): o serviço sai
-com `KeyError` e status 1. A imagem já grava `balanced` nesse arquivo no
-build. Para corrigir uma VM antiga sem esperar imagem nova:
+O sintoma clássico é o contexto SELinux de `/var/log/tuned`:
 
 ```bash
-echo balanced | sudo tee /etc/tuned/ppd_base_profile
-sudo systemctl restart tuned-ppd
+ls -Zd /var/log/tuned
+```
+
+Se aparecer `var_log_t` em vez de `tuned_log_t`, o `tuned-ppd` não consegue
+escrever o log e sai com status 1. A imagem nova corrige isso sozinha no boot
+seguinte depois do upgrade, porque o `tuned-log.conf` reaplica o contexto via
+`systemd-tmpfiles`. Para corrigir na hora, sem esperar o upgrade:
+
+```bash
+sudo restorecon -Rv /var/log/tuned
+sudo systemctl reset-failed tuned-ppd.service
+sudo systemctl restart tuned-ppd.service
 ```
 
 Para ver o erro real, não use `-p err` — o traceback do Python é registrado
