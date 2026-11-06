@@ -1,6 +1,6 @@
 # Imagem única para montar uma instalação mínima do Fedora 45 com interface gráfica GNOME
 FROM quay.io/fedora/fedora-bootc:45
-COPY locale.conf post-install.sh pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf ./
+COPY locale.conf flatpaks.preinstall pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf ./
 
 RUN mkdir -vp /var/roothome /data /var/home && \
     dnf5 -y upgrade --refresh --setopt=tsflags=nodocs && \
@@ -15,10 +15,9 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     rm -rvf /opt && mkdir -vp /var/opt && ln -vrs /var/opt /opt && \
     mkdir -vp /var/usrlocal && mv -v /usr/local/* /var/usrlocal/ 2>/dev/null && \
     rm -rvf /usr/local && ln -vrs /var/usrlocal /usr/local && \
-    # Script de pós-instalação
-    mv -v post-install.sh /usr/bin/post-install.sh && \
-    mv -v post-install.service /usr/lib/systemd/system/post-install.service && \
-    chmod +x /usr/bin/post-install.sh && \
+    # Flatpaks do primeiro boot e serviço que os instala
+    install -Dm644 flatpaks.preinstall /usr/share/flatpak/preinstall.d/flatpaks.preinstall && \
+    install -Dm644 post-install.service /usr/lib/systemd/system/post-install.service && \
     systemctl enable post-install.service && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*

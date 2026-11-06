@@ -1,0 +1,19 @@
+# /usr/share/flatpak/preinstall.d/flatpaks.preinstall
+#
+# Lista de Flatpaks instalados no primeiro boot pelo comando
+# `flatpak preinstall` (executado pelo post-install.service).
+#
+# Formato: uma seção [Flatpak Preinstall <app-id>] por aplicativo.
+# Para adicionar um app, copie o ID exato do Flathub.
+
+# Loja de aplicativos
+[Flatpak Preinstall io.github.kolunmi.Bazaar]
+Branch=stable
+
+# Navegador
+[Flatpak Preinstall org.mozilla.firefox]
+Branch=stable
+
+# Gerenciador de extensões do GNOME
+[Flatpak Preinstall com.mattjakeman.ExtensionManager]
+Branch=stable

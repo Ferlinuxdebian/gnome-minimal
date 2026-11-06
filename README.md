@@ -55,9 +55,9 @@ dela. A imagem antiga continua guardada para rollback.
 - `/var` — dados, logs, bancos, contêineres, flatpaks. **Persiste**.
 - `/home` — seus arquivos. **Persiste**.
 
-Por isso a regra de ouro: **não edite arquivos em `/usr` na máquina em
-execução**. Se você quer algo permanente, coloque na imagem (neste repositório)
-ou em `/etc` / `/var`.
+O `/usr` é montado como **somente leitura**. Não existe "editar `/usr`" na
+máquina em execução: qualquer mudança permanente precisa entrar na imagem.
+Já `/etc` e `/var` são graváveis e persistem entre atualizações.
 
 ### Por que isso importa para você?
 
@@ -110,11 +110,13 @@ instalar.
 - GNOME Shell minimalista
 - Nautilus, Ptyxis e utilitários básicos do desktop
 - Flatpak, Toolbox e Distrobox
-- Bazaar, Firefox e Extension Manager instalados no **primeiro boot** via Flatpak
+- Bazaar, Firefox e Extension Manager instalados no **primeiro boot** via `flatpak preinstall`
 
-Navegador, suíte office, players de mídia e outros aplicativos **não** vêm
-instalados. A proposta é deixar o sistema limpo e permitir que cada pessoa
-monte o desktop depois, com Flatpaks ou com a sua própria imagem.
+Os aplicativos não fazem parte da imagem: eles estão listados em
+`flatpaks.preinstall` e são baixados do Flathub no primeiro boot pelo serviço
+`post-install.service`. Assim a imagem base continua pequena, os apps são
+atualizados pelo próprio Flatpak e você não precisa rebuildar a imagem para
+mudar a lista.
 
 ---
 
@@ -141,8 +143,8 @@ monte o desktop depois, com Flatpaks ou com a sua própria imagem.
 ├── Containerfile                     # receita do build
 ├── pacotes_necessarios               # pacotes base do sistema
 ├── pacotes_desktop                   # pacotes do ambiente gráfico
-├── post-install.sh                   # script do primeiro boot (instala Flatpaks)
-├── post-install.service              # serviço systemd que roda o script
+├── flatpaks.preinstall               # lista de apps do primeiro boot
+├── post-install.service              # roda o flatpak preinstall no boot
 ├── locale.conf                       # idioma e formato regional
 ├── vconsole.conf                     # teclado e console
 ├── zram-generator.conf               # swap comprimido na RAM
@@ -154,8 +156,8 @@ monte o desktop depois, com Flatpaks ou com a sua própria imagem.
 | `Containerfile` | Define a imagem base, o que instalar e as configurações |
 | `pacotes_necessarios` | Lista de pacotes essenciais (um por linha) |
 | `pacotes_desktop` | Lista de pacotes do GNOME (um por linha) |
-| `post-install.sh` | Roda uma vez, no primeiro boot, para instalar Flatpaks |
-| `post-install.service` | Garante que o script rode no primeiro boot |
+| `flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
+| `post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
 | `locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
 | `vconsole.conf` | Layout de teclado do console |
 | `zram-generator.conf` | Cria swap comprimido em RAM |
@@ -180,7 +182,7 @@ preparada para `bootc`.
 ### `COPY`
 
 ```dockerfile
-COPY locale.conf post-install.sh pacotes_desktop pacotes_necessarios \
+COPY locale.conf flatpaks.preinstall pacotes_desktop pacotes_necessarios \
      post-install.service vconsole.conf zram-generator.conf ./
 ```
 
@@ -193,12 +195,13 @@ Cada `RUN` executa comandos durante o build. Neste projeto eles fazem, em
 ordem:
 
 1. Atualizam o sistema e instalam utilitários básicos;
-2. Movem os arquivos de configuração para `/etc` e `/usr`;
+2. Instalam os arquivos de configuração em `/etc` e `/usr`;
 3. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
    (para que esses diretórios persistam entre atualizações);
 4. Instalam o GNOME e os pacotes das duas listas;
-5. Limpam caches e diretórios temporários;
-6. Rodam o `bootc container lint`.
+5. Instalam o `flatpaks.preinstall` e habilitam o `post-install.service`;
+6. Limpam caches e diretórios temporários;
+7. Rodam o `bootc container lint`.
 
 > **Detalhe importante:** os links usam `ln -vrs`, com `r` de *relative*.
 > Links absolutos (`/usr/local -> /var/usrlocal`) apontam para fora da raiz da
@@ -215,6 +218,24 @@ só uma configuração, o build reaproveita as camadas anteriores.
 O lint avisa quando encontra conteúdo em `/run` ou `/tmp` (`nonempty-run-tmp`),
 porque essas pastas são recriadas a cada boot. Sobras de `dnf` e de políticas
 SELinux aparecem ali durante o build, então são removidas antes do lint.
+
+### Flatpaks do primeiro boot
+
+A imagem **não** instala aplicativos durante o build. Ela apenas deixa uma
+lista em `/usr/share/flatpak/preinstall.d/flatpaks.preinstall`. No boot, o
+`post-install.service`:
+
+1. espera a rede responder (testa o sumário do Flathub com `curl`);
+2. troca o remote `fedora` pelo `flathub`;
+3. roda `flatpak preinstall --system -y --noninteractive`.
+
+Esse comando é **idempotente e sincronizador**: instala o que falta, não mexe
+no que já existe e respeita apps que o usuário removeu. Se você adicionar um
+app à lista e publicar uma nova imagem, o próximo boot instala só a diferença.
+
+É por isso que ele é mais eficiente do que um script com vários
+`flatpak install`: uma única chamada resolve a lista inteira, sem repetir
+trabalho a cada boot.
 
 ---
 
@@ -283,7 +304,8 @@ dnf5 search nome-do-pacote
 - **Idioma:** `locale.conf`
 - **Teclado do console:** `vconsole.conf`
 - **Swap em RAM:** `zram-generator.conf`
-- **Primeiro boot:** `post-install.sh` e `post-install.service`
+- **Flatpaks do primeiro boot:** `flatpaks.preinstall` (lista) e
+  `post-install.service` (quem executa)
 - **Arquivos novos:** adicione um `COPY` no `Containerfile` e mova o arquivo
   para o destino final dentro de um `RUN`
 
@@ -404,9 +426,11 @@ comando, sem reinstalar nada.
 
 ## 9. Cuidados importantes
 
-- **Não edite `/usr` na máquina em execução.** A próxima atualização sobrescreve.
+- **`/usr` é somente leitura.** O sistema monta `/usr` como read-only; não há
+  como alterá-lo na máquina em execução. Toda mudança permanente entra na
+  imagem, neste repositório.
 - **Não instale pacotes com `dnf install` no sistema rodando.** O lugar certo
-  é a imagem, neste repositório.
+  é a imagem ou um Flatpak.
 - **`/etc` e `/var` persistem.** Configurações e dados ficam, mas evite
   depender de ajustes manuais que não estejam documentados na imagem.
 - **Teste em VM antes de trocar a máquina principal.**
@@ -445,12 +469,24 @@ No menu do bootloader, selecione a entrada anterior, ou rode
 `sudo bootc rollback` a partir de um sistema de recuperação.
 
 **Os Flatpaks não instalaram no primeiro boot**
-O `post-install.service` depende de rede. Verifique:
+O `post-install.service` espera a rede e roda `flatpak preinstall`. A primeira
+execução baixa os três apps e pode demorar alguns minutos. Verifique:
 
 ```bash
 systemctl status post-install.service
-journalctl -u post-install.service
+journalctl -u post-install.service -b
+flatpak list --system
 ```
+
+Se a rede ainda não estiver disponível, o serviço fica tentando; ele roda de
+novo no próximo boot. Para forçar manualmente:
+
+```bash
+sudo flatpak preinstall --system -y --noninteractive
+```
+
+Se um app não existir mais no Flathub, o `preinstall` falha naquele item.
+Confira o ID em `flatpaks.preinstall` e remova ou corrija a linha.
 
 ---
 
