@@ -147,7 +147,7 @@ mudar a lista.
 ├── flatpaks.preinstall               # lista de apps do primeiro boot
 ├── post-install.service              # roda o flatpak preinstall no boot
 ├── 10-btrfs-compress.toml            # karg de compressão btrfs
-├── tuned-ppd-retry.conf              # retry do tuned-ppd
+├── ppd_base_profile                  # perfil PPD padrão (balanced)
 ├── locale.conf                       # idioma e formato regional
 ├── vconsole.conf                     # teclado e console
 ├── zram-generator.conf               # swap comprimido na RAM
@@ -162,7 +162,7 @@ mudar a lista.
 | `flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
 | `post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
 | `10-btrfs-compress.toml` | Karg que ativa compressão `zstd:1` no btrfs da raiz |
-| `tuned-ppd-retry.conf` | Drop-in que faz o `tuned-ppd` tentar de novo se falhar |
+| `ppd_base_profile` | Perfil PPD padrão gravado em `/etc/tuned/ppd_base_profile` |
 | `locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
 | `vconsole.conf` | Layout de teclado do console |
 | `zram-generator.conf` | Cria swap comprimido em RAM |
@@ -200,8 +200,8 @@ Cada `RUN` executa comandos durante o build. Neste projeto eles fazem, em
 ordem:
 
 1. Atualizam o sistema e instalam utilitários básicos;
-2. Instalam os arquivos de configuração em `/etc` e `/usr`, o karg de
-   compressão btrfs e o retry do `tuned-ppd`;
+2. Instalam os arquivos de configuração em `/etc` e `/usr` e o karg de
+   compressão btrfs;
 3. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
    (para que esses diretórios persistam entre atualizações);
 4. Instalam o GNOME e os pacotes das duas listas;
@@ -259,11 +259,17 @@ continuam sem compressão até serem reescritos.
 
 ### tuned e tuned-ppd
 
-A imagem inclui `tuned` e `tuned-ppd` e habilita os dois serviços. O
-`tuned-ppd` pode falhar no primeiro boot se o `tuned` ainda estiver subindo ou
-se houver uma negação do SELinux na inicialização. O drop-in
-`tuned-ppd-retry.conf` faz o serviço tentar novamente em vez de ficar marcado
-como `failed`.
+A imagem inclui `tuned` e `tuned-ppd` e habilita os dois serviços.
+
+O `tuned-ppd` guarda o último perfil usado em `/etc/tuned/ppd_base_profile`
+e o restaura no boot seguinte. Se esse arquivo ficar com conteúdo inválido —
+por exemplo, vazio ou com bytes NUL após um desligamento abrupto da VM — o
+serviço sai com `KeyError` e status 1. É um bug conhecido do TuneD
+([issue 849](https://github.com/redhat-performance/tuned/issues/849)).
+
+Para evitar isso, a imagem grava `balanced` em `/etc/tuned/ppd_base_profile`
+durante o build (arquivo `ppd_base_profile`). Assim o serviço sempre encontra
+um perfil PPD válido (`power-saver`, `balanced` ou `performance`).
 
 ---
 
@@ -498,17 +504,29 @@ No menu do bootloader, selecione a entrada anterior, ou rode
 `sudo bootc rollback` a partir de um sistema de recuperação.
 
 **`tuned-ppd.service` aparece como failed**
-Ele depende do `tuned.service` e pode falhar no primeiro boot (race de
-inicialização ou negação do SELinux). O drop-in `tuned-ppd-retry.conf` já faz
-o serviço tentar de novo. Para conferir:
+Na maioria dos casos é o bug do `/etc/tuned/ppd_base_profile` com conteúdo
+inválido (vazio ou com bytes NUL após desligamento abrupto): o serviço sai
+com `KeyError` e status 1. A imagem já grava `balanced` nesse arquivo no
+build. Para corrigir uma VM antiga sem esperar imagem nova:
 
 ```bash
-systemctl status tuned.service tuned-ppd.service
-journalctl -u tuned-ppd.service -b
+echo balanced | sudo tee /etc/tuned/ppd_base_profile
+sudo systemctl restart tuned-ppd
 ```
 
-Se continuar falhando, veja se há negação do SELinux em
-`journalctl -t audit -g AVC -b`.
+Para ver o erro real, não use `-p err` — o traceback do Python é registrado
+com prioridade `info`:
+
+```bash
+journalctl -u tuned-ppd.service -b --no-pager
+```
+
+Se aparecer `TuneD not found on the DBus`, o problema é o `tuned.service`:
+
+```bash
+systemctl status tuned.service
+journalctl -u tuned.service -b --no-pager
+```
 
 **Os Flatpaks não instalaram no primeiro boot**
 O `post-install.service` espera a rede e roda `flatpak preinstall`. A primeira
