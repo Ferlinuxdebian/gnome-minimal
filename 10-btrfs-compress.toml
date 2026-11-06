@@ -1,0 +1,7 @@
+# /usr/lib/bootc/kargs.d/10-btrfs-compress.toml
+#
+# Ativa a compressão zstd:1 no btrfs da raiz.
+# Este é o mesmo karg usado no repositório bootc-gnome-minimal-f45.
+#
+# O bootc aplica estes argumentos ao instalar e ao atualizar o sistema.
+kargs = ["rootflags=compress=zstd:1"]

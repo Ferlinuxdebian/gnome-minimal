@@ -110,6 +110,7 @@ instalar.
 - GNOME Shell minimalista
 - Nautilus, Ptyxis e utilitários básicos do desktop
 - Flatpak, Toolbox e Distrobox
+- Compressão btrfs (`zstd:1`) habilitada por karg
 - Bazaar, Firefox e Extension Manager instalados no **primeiro boot** via `flatpak preinstall`
 
 Os aplicativos não fazem parte da imagem: eles estão listados em
@@ -145,6 +146,8 @@ mudar a lista.
 ├── pacotes_desktop                   # pacotes do ambiente gráfico
 ├── flatpaks.preinstall               # lista de apps do primeiro boot
 ├── post-install.service              # roda o flatpak preinstall no boot
+├── 10-btrfs-compress.toml            # karg de compressão btrfs
+├── tuned-ppd-retry.conf              # retry do tuned-ppd
 ├── locale.conf                       # idioma e formato regional
 ├── vconsole.conf                     # teclado e console
 ├── zram-generator.conf               # swap comprimido na RAM
@@ -158,6 +161,8 @@ mudar a lista.
 | `pacotes_desktop` | Lista de pacotes do GNOME (um por linha) |
 | `flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
 | `post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
+| `10-btrfs-compress.toml` | Karg que ativa compressão `zstd:1` no btrfs da raiz |
+| `tuned-ppd-retry.conf` | Drop-in que faz o `tuned-ppd` tentar de novo se falhar |
 | `locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
 | `vconsole.conf` | Layout de teclado do console |
 | `zram-generator.conf` | Cria swap comprimido em RAM |
@@ -195,7 +200,8 @@ Cada `RUN` executa comandos durante o build. Neste projeto eles fazem, em
 ordem:
 
 1. Atualizam o sistema e instalam utilitários básicos;
-2. Instalam os arquivos de configuração em `/etc` e `/usr`;
+2. Instalam os arquivos de configuração em `/etc` e `/usr`, o karg de
+   compressão btrfs e o retry do `tuned-ppd`;
 3. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
    (para que esses diretórios persistam entre atualizações);
 4. Instalam o GNOME e os pacotes das duas listas;
@@ -236,6 +242,28 @@ app à lista e publicar uma nova imagem, o próximo boot instala só a diferenç
 É por isso que ele é mais eficiente do que um script com vários
 `flatpak install`: uma única chamada resolve a lista inteira, sem repetir
 trabalho a cada boot.
+
+### Compressão btrfs
+
+O arquivo `10-btrfs-compress.toml` é instalado em
+`/usr/lib/bootc/kargs.d/` e adiciona o argumento de kernel:
+
+```text
+rootflags=compress=zstd:1
+```
+
+Com isso, o btrfs da raiz passa a comprimir os arquivos novos com zstd nível 1
+— uma boa relação entre economia de espaço e velocidade. O `bootc` aplica
+esses kargs ao instalar e ao atualizar o sistema. Arquivos que já existiam
+continuam sem compressão até serem reescritos.
+
+### tuned e tuned-ppd
+
+A imagem inclui `tuned` e `tuned-ppd` e habilita os dois serviços. O
+`tuned-ppd` pode falhar no primeiro boot se o `tuned` ainda estiver subindo ou
+se houver uma negação do SELinux na inicialização. O drop-in
+`tuned-ppd-retry.conf` faz o serviço tentar novamente em vez de ficar marcado
+como `failed`.
 
 ---
 
@@ -306,6 +334,7 @@ dnf5 search nome-do-pacote
 - **Swap em RAM:** `zram-generator.conf`
 - **Flatpaks do primeiro boot:** `flatpaks.preinstall` (lista) e
   `post-install.service` (quem executa)
+- **Argumentos de kernel:** `10-btrfs-compress.toml` (compressão btrfs)
 - **Arquivos novos:** adicione um `COPY` no `Containerfile` e mova o arquivo
   para o destino final dentro de um `RUN`
 
@@ -467,6 +496,19 @@ pacote ainda não existe com outro dono.
 **A máquina não sobe depois do switch**
 No menu do bootloader, selecione a entrada anterior, ou rode
 `sudo bootc rollback` a partir de um sistema de recuperação.
+
+**`tuned-ppd.service` aparece como failed**
+Ele depende do `tuned.service` e pode falhar no primeiro boot (race de
+inicialização ou negação do SELinux). O drop-in `tuned-ppd-retry.conf` já faz
+o serviço tentar de novo. Para conferir:
+
+```bash
+systemctl status tuned.service tuned-ppd.service
+journalctl -u tuned-ppd.service -b
+```
+
+Se continuar falhando, veja se há negação do SELinux em
+`journalctl -t audit -g AVC -b`.
 
 **Os Flatpaks não instalaram no primeiro boot**
 O `post-install.service` espera a rede e roda `flatpak preinstall`. A primeira
