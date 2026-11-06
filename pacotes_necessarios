@@ -18,8 +18,9 @@ zram-generator
 spice-vdagent
 podman
 fpaste
-auditctl
+audit
 unzip
 usbutils
+pciutils
 sysfsutils
 bash-color-prompt

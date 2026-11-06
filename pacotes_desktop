@@ -1,6 +1,5 @@
-# Aqui são os pacote referentes ao Desktop no caso Gnome, mas pode ser alterado para outro facilmente colocando-os aqui
-evince-thumbnailer
-ibus-typing-booster
+# Pacotes do ambiente gráfico GNOME.
+# Para trocar de desktop, substitua os pacotes desta lista.
 glycin-thumbnailer
 gnome-epub-thumbnailer
 evince-thumbnailer
@@ -12,9 +11,15 @@ gnome-shell-extension-appindicator
 nautilus
 ptyxis
 gnome-backgrounds
-f44-backgrounds-gnome
+f45-backgrounds-gnome
 
-# Plymounth Firula torna o boot agradável
+# Sons do GNOME (ex.: screenshot, alertas do terminal).
+# Sem estes backends, alguns efeitos sonoros do GNOME ficam mudos.
+libcanberra-backend-pulse
+libcanberra-backend-gstreamer
+libcanberra-backend-alsa
+
+# Plymouth deixa o boot mais bonito.
 plymouth
 plymouth-core-libs
 plymouth-graphics-libs

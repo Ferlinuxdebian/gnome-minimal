@@ -1,5 +1,5 @@
-# Imagem única para montar uma instalação mínima do Fedora 44 com interface gráfica GNOME
-FROM quay.io/fedora/fedora-bootc:44 
+# Imagem única para montar uma instalação mínima do Fedora 45 com interface gráfica GNOME
+FROM quay.io/fedora/fedora-bootc:45
 COPY locale.conf post-install.sh pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf ./
 
 RUN mkdir -vp /var/roothome /data /var/home && \

@@ -1,143 +1,236 @@
-## Fedora Bootc GNOME Minimal
+# Fedora Bootc GNOME Minimal
 
-Este repositório contém uma imagem personalizada baseada no fedora-boot imagem oficial, usando o conceito de sistemas imutáveis com bootc.
+Uma imagem de sistema atômico baseada no **Fedora 45** com **GNOME minimalista**, feita para quem quer aprender `bootc` na prática.
 
-A proposta do projeto é ser simples e didática, ajudando iniciantes a aprender como criar suas próprias imagens de sistema personalizadas com bootc.
+Este repositório é uma **referência para iniciantes**: mostra, do jeito mais simples possível, como montar uma imagem OCI inicializável, publicá-la no GHCR e instalar ou atualizar o sistema com `bootc`.
 
-A imagem utiliza um ambiente GNOME extremamente minimalista, trazendo apenas o básico para iniciar o sistema e permitindo que o próprio usuário escolha os aplicativos que deseja instalar depois.
+> **Sistema atômico:** a base do sistema é imutável. Você atualiza trocando a imagem inteira, e pode voltar para a versão anterior se algo der errado.
 
-## O que acompanha a imagem
+## O que vem na imagem
 
-A instalação inclui apenas:
+- Fedora 45 (`fedora-bootc`)
+- GNOME Shell minimalista
+- Nautilus, Ptyxis e utilitários básicos
+- Som funcionando no GNOME (PipeWire + backends do libcanberra)
+- `usbutils` (`lsusb`) e `pciutils` (`lspci`)
+- Flatpak, Toolbox e Distrobox
+- Bazaar, Firefox e Extension Manager instalados no primeiro boot via Flatpak
 
-* GNOME Shell
-* A loja de software é o Bazaar (flatpak)
-* Nautilus
-* Terminal Ptxys
-* Distrobox
-* Toolbox
+Navegador, suíte office, players de mídia e outros aplicativos **não** vêm instalados. A ideia é deixar o sistema limpo e permitir que cada usuário monte o desktop depois.
 
-Aplicativos como navegador, suíte office, players de mídia e outros programas não vêm instalados por padrão.
-A ideia é deixar o sistema limpo e permitir que cada usuário monte seu próprio desktop.
+## Instalando a imagem pronta
 
-## Objetivo do projeto
+Se você só quer usar a imagem já publicada:
 
-Este projeto foi criado para:
-
-* Aprender sobre bootc
-* Entender como funcionam imagens OCI inicializáveis
-* Criar sistemas personalizados baseados no Fedora
-* Gerar ISOs de instalação próprias
-* Explorar sistemas imutáveis de forma simples
-
-## Base da imagem
-
-* Base: `fedora-bootc`
-* Interface: GNOME Minimal
-* Sistema: Imutável via bootc
-* Distribuição base: Fedora Project
-* Formato de distribuição: Imagem OCI inicializável
-* Instalação: ISO personalizada inclusa no projeto
-
-## Estrutura dos arquivos
-
-| Arquivo                | Função                                          |
-| ---------------------- | ----------------------------------------------- |
-| `Containerfile`        | Define como a imagem é construída               |
-| `pacotes_desktop`      | Lista dos pacotes do ambiente gráfico           |
-| `pacotes_necessarios`  | Pacotes essenciais do sistema                   |
-| `post-install.sh`      | Script executado no primeiro boot               |
-| `post-install.service` | Serviço systemd responsável pelo pós-instalação |
-| `config.toml`          | Configuração usada para gerar a ISO             |
-| `locale.conf`          | Configuração regional pt-BR                     |
-| `vconsole.conf`        | Configuração do terminal TTY                    |
-| `zram-generator.conf`  | Configuração de zram                            |
-| `.github/workflows`    | Automação de builds via GitHub Actions          |
-
-## Atualizando o sistema
-
-```bash id="yq8yxv"
-# Verificar atualizações
-sudo bootc upgrade --check
-
-# Aplicar atualização
-sudo bootc upgrade
-
-# Reiniciar o sistema
-sudo reboot
-```
-
-## Comandos úteis
-
-```bash id="yq0x9j"
-# Ver informações da imagem atual
-bootc status
-
-# Voltar para a imagem anterior
-sudo bootc rollback
-```
-
-## Aviso sobre bootc switch
-
-Agora é possível realizar o bootc switch diretamente a partir do Fedora Silverblue para esta imagem.
-
-```
+```bash
 sudo bootc switch ghcr.io/ferlinuxdebian/gnome-minimal:latest
+sudo systemctl reboot
 ```
 
-## Clonando o projeto
+Funciona a partir do Fedora Silverblue/Kinoite ou de qualquer sistema que já use `bootc`.
 
-```bash id="66d9r8"
-git clone https://github.com/Ferlinuxdebian/gnome-minimal.git
+## Estrutura do projeto
+
+| Arquivo | Para que serve |
+| --- | --- |
+| `Containerfile` | Receita do build: imagem base, pacotes e configurações |
+| `pacotes_necessarios` | Pacotes essenciais do sistema e ferramentas |
+| `pacotes_desktop` | Pacotes do ambiente gráfico (GNOME) |
+| `post-install.sh` | Script executado no primeiro boot (instala Flatpaks) |
+| `post-install.service` | Serviço systemd que roda o script no primeiro boot |
+| `locale.conf` | Idioma e formato regional (pt-BR) |
+| `vconsole.conf` | Teclado e console (pt-BR) |
+| `zram-generator.conf` | Swap comprimido na RAM (zram) |
+| `.github/workflows/build-image.yml` | Build automático e publicação no GHCR |
+
+## Como o Containerfile funciona
+
+O build tem poucas etapas:
+
+1. `FROM quay.io/fedora/fedora-bootc:45` — parte da imagem oficial do Fedora.
+2. `COPY` — copia as listas de pacotes e arquivos de configuração para dentro do build.
+3. `RUN dnf5 install` — instala o GNOME e os pacotes das listas.
+4. `RUN bootc container lint` — valida se a imagem está apta a virar um sistema bootc.
+
+Cada `RUN` vira uma camada da imagem. Por isso as listas de pacotes e os arquivos de configuração são copiados uma única vez.
+
+## Criando a sua própria versão
+
+### 1. Faça um fork e clone
+
+Faça o fork no GitHub e clone o seu:
+
+```bash
+git clone https://github.com/SEU-USUARIO/gnome-minimal.git
 cd gnome-minimal
 ```
 
-## Build local da imagem
+### 2. Ajuste o nome da imagem no workflow
 
-```bash id="i8ls7u"
-sudo buildah build \
-    --skip-unused-stages=false \
-    --security-opt=label=disable \
-    -t "gnome-minimal" \
-    -f Containerfile \
-    -v $(pwd):/run/src \
-    .
+Abra `.github/workflows/build-image.yml` e troque:
+
+```yaml
+env:
+  IMAGE_NAME: ferlinuxdebian/gnome-minimal
 ```
 
-## Gerando a ISO de instalação
+pelo caminho do seu repositório:
 
-```bash id="eolam0"
-mkdir -p output
-
-sudo podman run \
-    --rm \
-    -it \
-    --privileged \
-    --pull=newer \
-    --security-opt label=type:unconfined_t \
-    -v ./output:/output \
-    -v ./config.toml:/config.toml:ro \
-    -v /var/lib/containers/storage:/var/lib/containers/storage \
-    quay.io/centos-bootc/bootc-image-builder:latest \
-    --type anaconda-iso \
-    --rootfs btrfs \
-    localhost/gnome-minimal
+```yaml
+env:
+  IMAGE_NAME: SEU-USUARIO/gnome-minimal
 ```
 
-## Download da ISO pelo GitHub Actions
+### 3. Escolha os pacotes
 
-Este repositório também gera automaticamente a ISO através do GitHub Actions.
+Quase toda personalização começa em dois arquivos:
 
-Para baixar a ISO gerada automaticamente:
+- **`pacotes_necessarios`** — base do sistema, ferramentas e serviços.
+- **`pacotes_desktop`** — tudo que é do ambiente gráfico.
 
-1. Abra a aba `Actions` do repositório
-2. Entre no workflow desejado
-3. Aguarde o build finalizar
-4. Role até a seção `Artifacts`
-5. Baixe o artefato contendo a ISO
+Cada linha é um pacote. Linhas que começam com `#` são comentários. Exemplo:
 
-![Fedora Bootc GNOME Minimal](https://i.imgur.com/cYXwJIl.png)
+```text
+htop
+fastfetch
+pciutils
+```
 
-## Sobre o projeto
+Para descobrir o nome exato de um pacote no Fedora:
 
-O foco deste repositório não é entregar um sistema cheio de aplicativos prontos, mas sim servir como base de aprendizado para quem deseja entender melhor o ecossistema bootc e começar a criar suas próprias imagens de sistema personalizadas.
+```bash
+dnf5 search nome-do-pacote
+```
+
+### 4. Personalize o sistema
+
+- **Idioma e teclado:** `locale.conf` e `vconsole.conf`.
+- **Memória comprimida:** `zram-generator.conf`.
+- **Primeiro boot:** `post-install.sh` e `post-install.service`.
+- **Arquivos novos:** adicione o `COPY` e o comando de instalação no `Containerfile`.
+
+### 5. Teste o build localmente
+
+```bash
+sudo podman build \
+  --security-opt label=disable \
+  -t localhost/gnome-minimal \
+  -f Containerfile .
+```
+
+Se quiser abrir um shell dentro da imagem para conferir pacotes:
+
+```bash
+podman run --rm -it localhost/gnome-minimal bash
+```
+
+### 6. Publique no GHCR
+
+```bash
+git add -A
+git commit -m "Minha personalização"
+git push origin main
+```
+
+O GitHub Actions vai buildar, otimizar a imagem com `bootc-base-imagectl` e publicar em:
+
+```text
+ghcr.io/SEU-USUARIO/gnome-minimal:latest
+```
+
+Se o pacote ficar privado, torne-o público em **Packages** no GitHub, ou faça login na máquina:
+
+```bash
+podman login ghcr.io
+```
+
+### 7. Instale ou atualize
+
+Na máquina onde você quer usar a sua imagem:
+
+```bash
+sudo bootc switch ghcr.io/SEU-USUARIO/gnome-minimal:latest
+sudo systemctl reboot
+```
+
+Depois, para receber novas versões:
+
+```bash
+sudo bootc upgrade
+sudo systemctl reboot
+```
+
+## Atualização e rollback
+
+```bash
+# Ver se há atualização disponível
+sudo bootc upgrade --check
+
+# Aplicar a atualização
+sudo bootc upgrade
+
+# Ver a imagem atual e o histórico
+bootc status
+
+# Voltar para a versão anterior
+sudo bootc rollback
+```
+
+O rollback é uma das maiores vantagens do sistema atômico: se uma atualização quebrar algo, você volta para a imagem anterior sem reinstalar nada.
+
+## Gerando uma ISO de instalação
+
+A geração de ISO **não fica mais neste repositório**. Use:
+
+**https://github.com/Ferlinuxdebian/anaconda-webui-bootc-installer**
+
+```bash
+git clone https://github.com/Ferlinuxdebian/anaconda-webui-bootc-installer.git
+cd anaconda-webui-bootc-installer
+
+sudo just build ghcr.io/SEU-USUARIO/gnome-minimal:latest
+sudo just create-iso
+```
+
+O repositório da ISO usa o Anaconda WebUI e instala a imagem escolhida via `bootc`.
+
+## Problemas comuns
+
+**O build falha com "No match for argument"**
+O nome do pacote está errado ou não existe no Fedora 45. Confira com `dnf5 search`.
+
+**`bootc switch` pede login**
+A imagem está privada. Torne o pacote público no GitHub ou rode `podman login ghcr.io`.
+
+**Sem som no GNOME**
+Confira se os backends continuam em `pacotes_desktop`:
+
+```text
+libcanberra-backend-pulse
+libcanberra-backend-gstreamer
+libcanberra-backend-alsa
+```
+
+O grupo `@multimedia` já instala o PipeWire e o WirePlumber.
+
+**Flatpaks não instalaram no primeiro boot**
+O `post-install.service` precisa de rede. Verifique:
+
+```bash
+systemctl status post-install.service
+journalctl -u post-install.service
+```
+
+**Preciso de `lspci` ou `lsusb`**
+Eles vêm de `pciutils` e `usbutils`, já incluídos em `pacotes_necessarios`.
+
+## Próximos passos
+
+- **Assinatura e verificação da imagem:**
+  https://github.com/Ferlinuxdebian/bootc-gnome-minimal-f45
+- **ISO com Anaconda WebUI:**
+  https://github.com/Ferlinuxdebian/anaconda-webui-bootc-installer
+
+## Licença
+
+CC BY 4.0 — veja `LICENSE.md`.
