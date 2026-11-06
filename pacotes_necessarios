@@ -24,3 +24,4 @@ usbutils
 pciutils
 sysfsutils
 bash-color-prompt
+kmscon-freetype

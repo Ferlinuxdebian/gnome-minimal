@@ -1,8 +1,9 @@
 # Pacotes do ambiente gráfico GNOME.
 # Para trocar de desktop, substitua os pacotes desta lista.
+gnome-shell
 glycin-thumbnailer
 gnome-epub-thumbnailer
-evince-thumbnailer
+papers-thumbnailer
 adw-gtk3-theme
 libnma
 ibus-typing-booster
@@ -12,6 +13,7 @@ nautilus
 ptyxis
 gnome-backgrounds
 f45-backgrounds-gnome
+gnome-initial-setup
 
 # Sons do GNOME (ex.: screenshot, alertas do terminal).
 # Sem estes backends, alguns efeitos sonoros do GNOME ficam mudos.

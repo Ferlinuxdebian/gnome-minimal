@@ -26,15 +26,9 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
-# 3. Pacotes base do ambiente gráfico GNOME Minimalista (REMOVA ESSE BLOCO SE FOR USAR OUTRA INTERFACE GRÁFICA)
-# E coloque os pacotes da outra interface no arquivo pacotes_desktop
-RUN dnf5 install gnome-shell --setopt=tsflags=nodocs --setopt=install_weak_deps=False -y && \
-    dnf5 clean all && \
-    rm -rfv /var/cache/* /var/lib/dnf/* /var/log/* /tmp/* /var/tmp/*
-
 # Instalação dos pacotes definidos nos arquivos de lista
 RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
-    grep -v '^#' pacotes_desktop | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
+    grep -v '^#' pacotes_desktop | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs --setopt=install_weak_deps=False -y && \
     systemctl mask systemd-remount-fs.service && \
     systemctl enable spice-vdagentd.service tuned.service tuned-ppd.service && \
     dnf5 clean all && \
