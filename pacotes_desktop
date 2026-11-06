@@ -1,6 +1,6 @@
 # Pacotes do ambiente gráfico GNOME.
-# Para trocar de desktop, substitua os pacotes desta lista.
-gnome-shell
+# Para trocar de desktop, coloque os pacotes do novo ambiente nesta lista e
+# remova o bloco do gnome-shell no Containerfile.
 glycin-thumbnailer
 gnome-epub-thumbnailer
 papers-thumbnailer

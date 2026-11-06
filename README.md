@@ -205,12 +205,11 @@ ordem:
    compressão btrfs e o `tuned-log.conf`;
 3. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
    (para que esses diretórios persistam entre atualizações);
-4. Instalam os pacotes das duas listas — o `gnome-shell` é apenas mais um
-   pacote de `pacotes_desktop` — com `tsflags=nodocs` e, na lista do desktop,
-   `install_weak_deps=False`;
-5. Instalam o `flatpaks.preinstall` e habilitam o `post-install.service`;
-6. Limpam caches e diretórios temporários;
-7. Rodam o `bootc container lint`.
+4. Instalam o `flatpaks.preinstall` e habilitam o `post-install.service`;
+5. Instalam o GNOME Shell em um bloco próprio, sem dependências fracas;
+6. Instalam os pacotes das duas listas;
+7. Limpam caches e diretórios temporários;
+8. Rodam o `bootc container lint`.
 
 > **Detalhe importante:** os links usam `ln -vrs`, com `r` de *relative*.
 > Links absolutos (`/usr/local -> /var/usrlocal`) apontam para fora da raiz da
@@ -326,8 +325,7 @@ O nome precisa ser **minúsculo** e seguir o padrão do GHCR:
 Quase toda personalização começa em dois arquivos:
 
 - **`pacotes_necessarios`** — base do sistema, ferramentas e serviços.
-- **`pacotes_desktop`** — tudo que é do ambiente gráfico, incluindo o
-  `gnome-shell`. Para trocar de interface, substitua os pacotes dessa lista.
+- **`pacotes_desktop`** — tudo que é do ambiente gráfico.
 
 Cada linha é um pacote. Linhas com `#` são comentários. Exemplo:
 
@@ -337,10 +335,14 @@ fastfetch
 neovim
 ```
 
-A lista do desktop é instalada com `--setopt=install_weak_deps=False`, ou seja,
-o `dnf` instala só as dependências obrigatórias. Isso deixa a imagem menor e
-mais previsível: se você quiser um pacote que normalmente viria como
-dependência fraca, adicione-o explicitamente à lista.
+O `gnome-shell` é instalado em um bloco próprio no `Containerfile`, com
+`--setopt=install_weak_deps=False` (só dependências obrigatórias). O restante
+de `pacotes_desktop` é instalado normalmente, com as dependências fracas
+habilitadas.
+
+> **Para trocar de ambiente gráfico:** coloque os pacotes do novo ambiente
+> (KDE, XFCE etc.) em `pacotes_desktop` e remova o bloco do `gnome-shell` do
+> `Containerfile`.
 
 Para descobrir o nome exato de um pacote no Fedora:
 
