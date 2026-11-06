@@ -1,71 +1,241 @@
 # Fedora Bootc GNOME Minimal
 
-Uma imagem de sistema atômico baseada no **Fedora 45** com **GNOME minimalista**, feita para quem quer aprender `bootc` na prática.
+Uma imagem de sistema **atômico** baseada no **Fedora 45**, com um **GNOME
+minimalista**, criada para servir de referência para quem está começando com
+`bootc`.
 
-Este repositório é uma **referência para iniciantes**: mostra, do jeito mais simples possível, como montar uma imagem OCI inicializável, publicá-la no GHCR e instalar ou atualizar o sistema com `bootc`.
+A ideia deste repositório é ser simples e didático: mostrar, do começo ao fim,
+como transformar um `Containerfile` em um sistema operacional instalável,
+publicá-lo em um registro de imagens e atualizar a máquina trocando a imagem
+inteira — com direito a rollback se algo der errado.
 
-> **Sistema atômico:** a base do sistema é imutável. Você atualiza trocando a imagem inteira, e pode voltar para a versão anterior se algo der errado.
+> Se você nunca ouviu falar em sistema atômico, imagem OCI ou `bootc`, leia a
+> próxima seção. Ela explica os conceitos usados no resto do guia.
 
-## O que vem na imagem
+---
 
-- Fedora 45 (`fedora-bootc`)
-- GNOME Shell minimalista
-- Nautilus, Ptyxis e utilitários básicos
-- Som funcionando no GNOME (PipeWire + backends do libcanberra)
-- `usbutils` (`lsusb`) e `pciutils` (`lspci`)
-- Flatpak, Toolbox e Distrobox
-- Bazaar, Firefox e Extension Manager instalados no primeiro boot via Flatpak
+## 1. O que é um sistema atômico?
 
-Navegador, suíte office, players de mídia e outros aplicativos **não** vêm instalados. A ideia é deixar o sistema limpo e permitir que cada usuário monte o desktop depois.
+No Fedora tradicional, o sistema é uma pasta gigante onde cada instalação,
+atualização ou remoção de pacote altera arquivos espalhados por `/usr`, `/etc`,
+`/var` e por aí vai. Com o tempo, duas máquinas que "deveriam" ser iguais
+acabam diferentes.
 
-## Instalando a imagem pronta
+Em um **sistema atômico**, a base do sistema (`/usr`) vem de uma **imagem
+pronta e versionada**. Atualizar não significa aplicar centenas de mudanças
+soltas: significa **trocar a imagem inteira** por outra mais nova.
 
-Se você só quer usar a imagem já publicada:
+Duas comparações ajudam:
+
+| Sistema tradicional | Sistema atômico |
+| --- | --- |
+| Você atualiza pacote por pacote | Você troca a imagem inteira |
+| O sistema muda aos poucos | O sistema é substituído em bloco |
+| Se a atualização quebrar, dá trabalho voltar | `bootc rollback` volta para a imagem anterior |
+| Cada máquina fica um pouco diferente | Todas as máquinas com a mesma imagem são iguais |
+
+### Imagem x sistema em execução
+
+Essa distinção é a mais importante do guia:
+
+- **Imagem**: um arquivo compactado (formato OCI, o mesmo dos contêineres) que
+  contém o sistema de arquivos base. Ela é **somente leitura** e fica guardada
+  no registro (por exemplo, o GHCR do GitHub).
+- **Sistema em execução**: o que você vê ligado na máquina. Ele é montado a
+  partir de uma imagem, mas tem camadas graváveis por cima.
+
+Quando você roda `bootc switch` ou `bootc upgrade`, o `bootc` baixa uma nova
+imagem e prepara a próxima inicialização. No reboot, o sistema sobe a partir
+dela. A imagem antiga continua guardada para rollback.
+
+### O que é preservado?
+
+- `/usr` — vem da imagem e é **substituído** a cada atualização.
+- `/etc` — suas configurações. O `bootc` faz merge das mudanças a cada update.
+- `/var` — dados, logs, bancos, contêineres, flatpaks. **Persiste**.
+- `/home` — seus arquivos. **Persiste**.
+
+Por isso a regra de ouro: **não edite arquivos em `/usr` na máquina em
+execução**. Se você quer algo permanente, coloque na imagem (neste repositório)
+ou em `/etc` / `/var`.
+
+### Por que isso importa para você?
+
+Você deixa de configurar a máquina "na mão" e passa a **descrever** a máquina
+em um arquivo. O resultado é reproduzível: a mesma receita gera o mesmo
+sistema, hoje ou daqui a seis meses.
+
+---
+
+## 2. O que é o `bootc`?
+
+`bootc` é a ferramenta que instala, atualiza e faz rollback de sistemas a
+partir de imagens OCI. Ela roda dentro da própria imagem e conversa com o
+gerenciador de boot do sistema.
+
+Os comandos que você mais vai usar:
+
+| Comando | O que faz |
+| --- | --- |
+| `bootc status` | Mostra a imagem atual, o digest e o histórico |
+| `bootc switch <imagem>` | Troca a imagem de referência (ex.: passar a usar a sua) |
+| `bootc upgrade` | Baixa a versão mais nova da imagem já configurada |
+| `bootc upgrade --check` | Só verifica se existe atualização |
+| `bootc rollback` | Volta para a imagem anterior |
+
+`switch` e `upgrade` **preparam** a próxima inicialização. Para valer, é
+preciso reiniciar.
+
+### O `bootc container lint`
+
+Toda imagem feita para `bootc` precisa seguir algumas regras: não deixar lixo
+em `/run`, não usar links simbólicos que "escapem" da raiz da imagem, ter os
+binários de runtime necessários, etc.
+
+O comando abaixo valida tudo isso:
 
 ```bash
-sudo bootc switch ghcr.io/ferlinuxdebian/gnome-minimal:latest
-sudo systemctl reboot
+bootc container lint
 ```
 
-Funciona a partir do Fedora Silverblue/Kinoite ou de qualquer sistema que já use `bootc`.
+Neste projeto ele roda no final do `Containerfile`. Se o lint falhar, o build
+falha — e é melhor falhar no build do que descobrir o problema depois de
+instalar.
 
-## Estrutura do projeto
+---
+
+## 3. O que vem na imagem
+
+- Base: `quay.io/fedora/fedora-bootc:45`
+- GNOME Shell minimalista
+- Nautilus, Ptyxis e utilitários básicos do desktop
+- Flatpak, Toolbox e Distrobox
+- Bazaar, Firefox e Extension Manager instalados no **primeiro boot** via Flatpak
+
+Navegador, suíte office, players de mídia e outros aplicativos **não** vêm
+instalados. A proposta é deixar o sistema limpo e permitir que cada pessoa
+monte o desktop depois, com Flatpaks ou com a sua própria imagem.
+
+---
+
+## 4. Conceitos que você vai encontrar
+
+| Termo | Significado |
+| --- | --- |
+| **Imagem** | Sistema de arquivos empacotado no formato OCI. É o "produto final" do build. |
+| **Containerfile** | Receita de build da imagem (igual a um Dockerfile). |
+| **Camada (layer)** | Cada `RUN`, `COPY` ou `ADD` gera uma camada. O `bootc` usa camadas para baixar só o que mudou. |
+| **Tag** | Apelido de uma imagem, como `latest` ou `45-20261105-0345`. |
+| **Digest** | Identificador único e imutável de uma imagem (`sha256:...`). |
+| **Registro** | Servidor que guarda imagens. Aqui usamos o **GHCR** (`ghcr.io`). |
+| **Rechunk** | Reorganização das camadas da imagem para que as atualizações baixem menos dados. |
+| **Deployment** | Uma "entrada" de sistema instalado. O `bootc` mantém a atual e a anterior para rollback. |
+| **Flatpak** | Formato de aplicativo isolado, instalado fora da imagem base. |
+
+---
+
+## 5. Estrutura do projeto
+
+```text
+.
+├── Containerfile                     # receita do build
+├── pacotes_necessarios               # pacotes base do sistema
+├── pacotes_desktop                   # pacotes do ambiente gráfico
+├── post-install.sh                   # script do primeiro boot (instala Flatpaks)
+├── post-install.service              # serviço systemd que roda o script
+├── locale.conf                       # idioma e formato regional
+├── vconsole.conf                     # teclado e console
+├── zram-generator.conf               # swap comprimido na RAM
+└── .github/workflows/build-image.yml # build e publicação automáticos
+```
 
 | Arquivo | Para que serve |
 | --- | --- |
-| `Containerfile` | Receita do build: imagem base, pacotes e configurações |
-| `pacotes_necessarios` | Pacotes essenciais do sistema e ferramentas |
-| `pacotes_desktop` | Pacotes do ambiente gráfico (GNOME) |
-| `post-install.sh` | Script executado no primeiro boot (instala Flatpaks) |
-| `post-install.service` | Serviço systemd que roda o script no primeiro boot |
-| `locale.conf` | Idioma e formato regional (pt-BR) |
-| `vconsole.conf` | Teclado e console (pt-BR) |
-| `zram-generator.conf` | Swap comprimido na RAM (zram) |
-| `.github/workflows/build-image.yml` | Build automático e publicação no GHCR |
+| `Containerfile` | Define a imagem base, o que instalar e as configurações |
+| `pacotes_necessarios` | Lista de pacotes essenciais (um por linha) |
+| `pacotes_desktop` | Lista de pacotes do GNOME (um por linha) |
+| `post-install.sh` | Roda uma vez, no primeiro boot, para instalar Flatpaks |
+| `post-install.service` | Garante que o script rode no primeiro boot |
+| `locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
+| `vconsole.conf` | Layout de teclado do console |
+| `zram-generator.conf` | Cria swap comprimido em RAM |
+| `build-image.yml` | GitHub Actions: builda, otimiza e publica no GHCR |
 
-## Como o Containerfile funciona
+---
 
-O build tem poucas etapas:
+## 6. Como o `Containerfile` funciona
 
-1. `FROM quay.io/fedora/fedora-bootc:45` — parte da imagem oficial do Fedora.
-2. `COPY` — copia as listas de pacotes e arquivos de configuração para dentro do build.
-3. `RUN dnf5 install` — instala o GNOME e os pacotes das listas.
-4. `RUN bootc container lint` — valida se a imagem está apta a virar um sistema bootc.
+O arquivo tem poucas etapas. Entender cada uma é o suficiente para
+personalizar quase tudo.
 
-Cada `RUN` vira uma camada da imagem. Por isso as listas de pacotes e os arquivos de configuração são copiados uma única vez.
+### `FROM`
 
-## Criando a sua própria versão
+```dockerfile
+FROM quay.io/fedora/fedora-bootc:45
+```
 
-### 1. Faça um fork e clone
+Toda imagem começa de outra imagem. Aqui partimos da imagem oficial do Fedora
+preparada para `bootc`.
 
-Faça o fork no GitHub e clone o seu:
+### `COPY`
+
+```dockerfile
+COPY locale.conf post-install.sh pacotes_desktop pacotes_necessarios \
+     post-install.service vconsole.conf zram-generator.conf ./
+```
+
+Copia os arquivos do repositório para dentro do build. Depois eles são movidos
+para os lugares definitivos.
+
+### `RUN`
+
+Cada `RUN` executa comandos durante o build. Neste projeto eles fazem, em
+ordem:
+
+1. Atualizam o sistema e instalam utilitários básicos;
+2. Movem os arquivos de configuração para `/etc` e `/usr`;
+3. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
+   (para que esses diretórios persistam entre atualizações);
+4. Instalam o GNOME e os pacotes das duas listas;
+5. Limpam caches e diretórios temporários;
+6. Rodam o `bootc container lint`.
+
+> **Detalhe importante:** os links usam `ln -vrs`, com `r` de *relative*.
+> Links absolutos (`/usr/local -> /var/usrlocal`) apontam para fora da raiz da
+> imagem e fazem o lint falhar com `a path led outside of the filesystem`.
+
+### Sobre as camadas
+
+Cada `RUN` vira uma camada. Por isso os passos pesados (atualização e
+instalação de pacotes) ficam separados das configurações finais: se você mudar
+só uma configuração, o build reaproveita as camadas anteriores.
+
+### Por que limpar `/run` e `/tmp`?
+
+O lint avisa quando encontra conteúdo em `/run` ou `/tmp` (`nonempty-run-tmp`),
+porque essas pastas são recriadas a cada boot. Sobras de `dnf` e de políticas
+SELinux aparecem ali durante o build, então são removidas antes do lint.
+
+---
+
+## 7. Passo a passo: crie a sua versão
+
+### 7.1 Pré-requisitos
+
+- Conta no GitHub (para o fork e para o GHCR).
+- Opcional: uma máquina Fedora com `podman` para testar o build localmente.
+  Se não tiver, pode deixar o build só no GitHub Actions.
+
+### 7.2 Faça um fork e clone
+
+Faça o fork no GitHub e clone o **seu** repositório:
 
 ```bash
 git clone https://github.com/SEU-USUARIO/gnome-minimal.git
 cd gnome-minimal
 ```
 
-### 2. Ajuste o nome da imagem no workflow
+### 7.3 Ajuste o nome da imagem
 
 Abra `.github/workflows/build-image.yml` e troque:
 
@@ -74,26 +244,29 @@ env:
   IMAGE_NAME: ferlinuxdebian/gnome-minimal
 ```
 
-pelo caminho do seu repositório:
+por:
 
 ```yaml
 env:
   IMAGE_NAME: SEU-USUARIO/gnome-minimal
 ```
 
-### 3. Escolha os pacotes
+O nome precisa ser **minúsculo** e seguir o padrão do GHCR:
+`usuario/nome-da-imagem`.
+
+### 7.4 Escolha os pacotes
 
 Quase toda personalização começa em dois arquivos:
 
 - **`pacotes_necessarios`** — base do sistema, ferramentas e serviços.
 - **`pacotes_desktop`** — tudo que é do ambiente gráfico.
 
-Cada linha é um pacote. Linhas que começam com `#` são comentários. Exemplo:
+Cada linha é um pacote. Linhas com `#` são comentários. Exemplo:
 
 ```text
 htop
 fastfetch
-pciutils
+neovim
 ```
 
 Para descobrir o nome exato de um pacote no Fedora:
@@ -102,29 +275,44 @@ Para descobrir o nome exato de um pacote no Fedora:
 dnf5 search nome-do-pacote
 ```
 
-### 4. Personalize o sistema
+> **Atenção:** um nome errado derruba o build com
+> `No match for argument`. Confira antes de enviar.
 
-- **Idioma e teclado:** `locale.conf` e `vconsole.conf`.
-- **Memória comprimida:** `zram-generator.conf`.
-- **Primeiro boot:** `post-install.sh` e `post-install.service`.
-- **Arquivos novos:** adicione o `COPY` e o comando de instalação no `Containerfile`.
+### 7.5 Personalize o sistema
 
-### 5. Teste o build localmente
+- **Idioma:** `locale.conf`
+- **Teclado do console:** `vconsole.conf`
+- **Swap em RAM:** `zram-generator.conf`
+- **Primeiro boot:** `post-install.sh` e `post-install.service`
+- **Arquivos novos:** adicione um `COPY` no `Containerfile` e mova o arquivo
+  para o destino final dentro de um `RUN`
+
+### 7.6 Teste o build localmente (opcional, mas recomendado)
 
 ```bash
 sudo podman build \
   --security-opt label=disable \
-  -t localhost/gnome-minimal \
+  -t localhost/gnome-minimal:test \
   -f Containerfile .
 ```
 
-Se quiser abrir um shell dentro da imagem para conferir pacotes:
+O parâmetro `--security-opt label=disable` evita problemas de SELinux durante o
+build. Se o lint passar, a imagem está consistente.
+
+Para abrir um shell dentro da imagem e conferir pacotes:
 
 ```bash
-podman run --rm -it localhost/gnome-minimal bash
+sudo podman run --rm -it localhost/gnome-minimal:test bash
 ```
 
-### 6. Publique no GHCR
+Dentro dele você pode rodar, por exemplo:
+
+```bash
+rpm -q gnome-shell
+bootc container lint
+```
+
+### 7.7 Publique no GHCR
 
 ```bash
 git add -A
@@ -132,55 +320,144 @@ git commit -m "Minha personalização"
 git push origin main
 ```
 
-O GitHub Actions vai buildar, otimizar a imagem com `bootc-base-imagectl` e publicar em:
+O GitHub Actions vai:
 
-```text
-ghcr.io/SEU-USUARIO/gnome-minimal:latest
-```
+1. buildar a imagem;
+2. otimizar as camadas com `bootc-base-imagectl rechunk`;
+3. publicar em `ghcr.io/SEU-USUARIO/gnome-minimal`;
+4. criar as tags `latest`, `main`, `45-latest` e `sha-<commit>`.
 
-Se o pacote ficar privado, torne-o público em **Packages** no GitHub, ou faça login na máquina:
+Acompanhe em **Actions** no GitHub. No fim, a imagem aparece em **Packages**.
+
+### 7.8 Deixe o pacote público (ou faça login)
+
+Por padrão, pacotes do GHCR podem ficar privados. Para instalar sem login:
+
+1. Abra **Packages** no seu perfil do GitHub;
+2. Entre em `gnome-minimal`;
+3. **Package settings** → **Change visibility** → **Public**.
+
+Se preferir manter privado, faça login na máquina que vai instalar:
 
 ```bash
 podman login ghcr.io
 ```
 
-### 7. Instale ou atualize
+### 7.9 Instale a sua imagem
 
-Na máquina onde você quer usar a sua imagem:
+Em uma máquina que já usa `bootc` (Fedora Silverblue, Kinoite, outra imagem
+bootc, etc.):
 
 ```bash
 sudo bootc switch ghcr.io/SEU-USUARIO/gnome-minimal:latest
 sudo systemctl reboot
 ```
 
-Depois, para receber novas versões:
+Após o reboot, confira:
 
 ```bash
-sudo bootc upgrade
-sudo systemctl reboot
+bootc status
 ```
 
-## Atualização e rollback
+Você verá a imagem e o digest em uso.
+
+> **Dica de segurança:** teste primeiro em uma máquina virtual. O repositório
+> [anaconda-webui-bootc-installer](https://github.com/Ferlinuxdebian/anaconda-webui-bootc-installer)
+> gera uma ISO que instala a imagem do zero em VM ou hardware real.
+
+### 7.10 Atualize depois de mudar algo
+
+Sempre que você alterar o repositório e fizer push, uma nova imagem é
+publicada. Na máquina:
 
 ```bash
-# Ver se há atualização disponível
+sudo bootc upgrade --check   # existe versão nova?
+sudo bootc upgrade           # baixa e prepara
+sudo systemctl reboot        # aplica
+```
+
+---
+
+## 8. Atualização, inspeção e rollback
+
+```bash
+# Ver a imagem atual, o digest e o deployment anterior
+bootc status
+
+# Verificar se há atualização disponível
 sudo bootc upgrade --check
 
 # Aplicar a atualização
 sudo bootc upgrade
+sudo systemctl reboot
 
-# Ver a imagem atual e o histórico
-bootc status
-
-# Voltar para a versão anterior
+# Voltar para a imagem anterior
 sudo bootc rollback
+sudo systemctl reboot
 ```
 
-O rollback é uma das maiores vantagens do sistema atômico: se uma atualização quebrar algo, você volta para a imagem anterior sem reinstalar nada.
+O rollback é a maior vantagem do sistema atômico: a imagem anterior continua
+no disco. Se uma atualização quebrar o boot ou um driver, você volta em um
+comando, sem reinstalar nada.
 
-## Gerando uma ISO de instalação
+---
 
-A geração de ISO **não fica mais neste repositório**. Use:
+## 9. Cuidados importantes
+
+- **Não edite `/usr` na máquina em execução.** A próxima atualização sobrescreve.
+- **Não instale pacotes com `dnf install` no sistema rodando.** O lugar certo
+  é a imagem, neste repositório.
+- **`/etc` e `/var` persistem.** Configurações e dados ficam, mas evite
+  depender de ajustes manuais que não estejam documentados na imagem.
+- **Teste em VM antes de trocar a máquina principal.**
+- **Cada push na `main` gera uma imagem.** Se quiser testar sem publicar,
+  use um branch e ajuste o workflow, ou faça o build local.
+- **O build precisa de espaço em disco.** O passo de limpeza no topo do
+  workflow existe para isso.
+
+---
+
+## 10. Problemas comuns
+
+**`No match for argument: <pacote>`**
+O pacote não existe no Fedora 45 ou o nome está errado. Confira com
+`dnf5 search`.
+
+**`Linting: Unexpected runtime error running lint runtime-deps: ... a path led outside of the filesystem`**
+Algum link simbólico dentro da imagem aponta para fora da raiz. Use links
+relativos (`ln -vrs`), como no `Containerfile` deste projeto.
+
+**`Lint warning: nonempty-run-tmp`**
+Sobrou conteúdo em `/run` ou `/tmp`. Remova esses arquivos antes do
+`bootc container lint` (o projeto já faz isso com `/run/dnf` e
+`/run/selinux-policy`).
+
+**`bootc switch` pede login**
+A imagem está privada. Torne o pacote público no GitHub ou rode
+`podman login ghcr.io`.
+
+**O workflow falha no login do GHCR**
+Verifique se `permissions: packages: write` está presente no job e se o
+pacote ainda não existe com outro dono.
+
+**A máquina não sobe depois do switch**
+No menu do bootloader, selecione a entrada anterior, ou rode
+`sudo bootc rollback` a partir de um sistema de recuperação.
+
+**Os Flatpaks não instalaram no primeiro boot**
+O `post-install.service` depende de rede. Verifique:
+
+```bash
+systemctl status post-install.service
+journalctl -u post-install.service
+```
+
+---
+
+## 11. Gerando uma ISO de instalação
+
+A geração de ISO **não fica neste repositório**. Use o projeto dedicado, que
+usa o Anaconda WebUI para instalar uma imagem `bootc` em disco:
 
 **https://github.com/Ferlinuxdebian/anaconda-webui-bootc-installer**
 
@@ -192,44 +469,35 @@ sudo just build ghcr.io/SEU-USUARIO/gnome-minimal:latest
 sudo just create-iso
 ```
 
-O repositório da ISO usa o Anaconda WebUI e instala a imagem escolhida via `bootc`.
+É a forma mais simples de testar a sua imagem em uma máquina virtual.
 
-## Problemas comuns
+---
 
-**O build falha com "No match for argument"**
-O nome do pacote está errado ou não existe no Fedora 45. Confira com `dnf5 search`.
+## 12. Próximos passos
 
-**`bootc switch` pede login**
-A imagem está privada. Torne o pacote público no GitHub ou rode `podman login ghcr.io`.
-
-**Sem som no GNOME**
-Confira se os backends continuam em `pacotes_desktop`:
-
-```text
-libcanberra-backend-pulse
-libcanberra-backend-gstreamer
-libcanberra-backend-alsa
-```
-
-O grupo `@multimedia` já instala o PipeWire e o WirePlumber.
-
-**Flatpaks não instalaram no primeiro boot**
-O `post-install.service` precisa de rede. Verifique:
-
-```bash
-systemctl status post-install.service
-journalctl -u post-install.service
-```
-
-**Preciso de `lspci` ou `lsusb`**
-Eles vêm de `pciutils` e `usbutils`, já incluídos em `pacotes_necessarios`.
-
-## Próximos passos
-
-- **Assinatura e verificação da imagem:**
+- **Assinatura e verificação de imagens bootc:**
   https://github.com/Ferlinuxdebian/bootc-gnome-minimal-f45
 - **ISO com Anaconda WebUI:**
   https://github.com/Ferlinuxdebian/anaconda-webui-bootc-installer
+- **Documentação oficial do bootc:**
+  https://bootc.dev
+
+---
+
+## 13. Glossário rápido
+
+- **Atômico**: sistema cuja base é trocada em bloco, não pacote a pacote.
+- **bootc**: ferramenta que instala e atualiza sistemas a partir de imagens OCI.
+- **Containerfile**: receita de build da imagem.
+- **Digest**: identificador imutável de uma imagem (`sha256:...`).
+- **GHCR**: GitHub Container Registry, onde as imagens são publicadas.
+- **Imagem OCI**: pacote padronizado com o sistema de arquivos base.
+- **Lint**: validação automática das regras de uma imagem bootc.
+- **Rechunk**: reorganização de camadas para reduzir o download de updates.
+- **Rollback**: voltar para o deployment anterior.
+- **Tag**: apelido móvel de uma imagem, como `latest`.
+
+---
 
 ## Licença
 

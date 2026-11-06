@@ -9,10 +9,12 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     mv -v zram-generator.conf /usr/lib/systemd/zram-generator.conf.d/10-zram.conf || mv -v zram-generator.conf /etc/systemd/ && \
     mv -v vconsole.conf /etc/vconsole.conf && \
     mv -v locale.conf /etc/locale.conf && \
-    # Organização de diretórios e links simbólicos para persistência
-    rm -rvf /opt && mkdir -vp /var/opt && ln -vs /var/opt /opt && \
+    # Organização de diretórios e links simbólicos para persistência.
+    # Os links precisam ser RELATIVOS (ln -r). Links absolutos apontam para
+    # fora da raiz da imagem e o `bootc container lint` falha.
+    rm -rvf /opt && mkdir -vp /var/opt && ln -vrs /var/opt /opt && \
     mkdir -vp /var/usrlocal && mv -v /usr/local/* /var/usrlocal/ 2>/dev/null && \
-    rm -rvf /usr/local && ln -vs /var/usrlocal /usr/local && \
+    rm -rvf /usr/local && ln -vrs /var/usrlocal /usr/local && \
     # Script de pós-instalação
     mv -v post-install.sh /usr/bin/post-install.sh && \
     mv -v post-install.service /usr/lib/systemd/system/post-install.service && \
@@ -36,6 +38,11 @@ RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/* \
     /var/usrlocal/share/applications/mimeinfo.cache \
     /var/roothome/.*
+
+# Limpeza de diretórios de runtime.
+# O `bootc container lint` avisa (nonempty-run-tmp) quando sobra conteúdo
+# em /run ou /tmp, porque essas pastas são recriadas a cada boot.
+RUN rm -rfv /run/dnf /run/selinux-policy /tmp/* /var/tmp/*
 
 # Verificação da imagem
 RUN bootc container lint
