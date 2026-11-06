@@ -1,3 +1,5 @@
+![Aprendendo Imagens bootc](https://i.imgur.com/jxX4wxk.jpeg)
+
 # Fedora Bootc GNOME Minimal
 
 Uma imagem de sistema **atômico** baseada no **Fedora 45**, com um **GNOME
