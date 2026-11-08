@@ -111,6 +111,7 @@ instalar.
 - Nautilus, Ptyxis e utilitários básicos do desktop
 - Flatpak, Toolbox e Distrobox
 - Compressão btrfs (`zstd:1`) habilitada por karg
+- Splash gráfico do Plymouth (`rhgb quiet`) habilitado por karg
 - Bazaar, Firefox e Extension Manager instalados no **primeiro boot** via `flatpak preinstall`
 
 Os aplicativos não fazem parte da imagem: eles estão listados em
@@ -147,6 +148,7 @@ mudar a lista.
 ├── flatpaks.preinstall               # lista de apps do primeiro boot
 ├── post-install.service              # roda o flatpak preinstall no boot
 ├── 10-btrfs-compress.toml            # karg de compressão btrfs
+├── 20-plymouth.toml                  # kargs do splash do Plymouth
 ├── tuned-log.conf                    # tmpfiles.d do log do tuned-ppd
 ├── locale.conf                       # idioma e formato regional
 ├── vconsole.conf                     # teclado e console
@@ -162,6 +164,7 @@ mudar a lista.
 | `flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
 | `post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
 | `10-btrfs-compress.toml` | Karg que ativa compressão `zstd:1` no btrfs da raiz |
+| `20-plymouth.toml` | Kargs `rhgb quiet` que exibem o splash do Plymouth no boot |
 | `tuned-log.conf` | tmpfiles.d que cria e rotula `/var/log/tuned` a cada boot |
 | `locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
 | `vconsole.conf` | Layout de teclado do console |
@@ -258,6 +261,25 @@ Com isso, o btrfs da raiz passa a comprimir os arquivos novos com zstd nível 1
 — uma boa relação entre economia de espaço e velocidade. O `bootc` aplica
 esses kargs ao instalar e ao atualizar o sistema. Arquivos que já existiam
 continuam sem compressão até serem reescritos.
+
+### Splash do Plymouth
+
+O `pacotes_desktop` instala o Plymouth, mas instalar o pacote não basta: ele só
+assume a tela quando o kernel recebe os argumentos `rhgb` e `quiet`. O arquivo
+`20-plymouth.toml` é instalado em `/usr/lib/bootc/kargs.d/` e adiciona:
+
+```text
+rhgb quiet
+```
+
+- `rhgb` faz o Plymouth mostrar o splash em vez do console;
+- `quiet` esconde as mensagens de kernel e de serviços durante o boot.
+
+Assim como os kargs de compressão, eles são aplicados pelo `bootc` na
+instalação e em cada `bootc upgrade`/`switch`. Em uma máquina que já está
+instalada, a mudança só aparece depois de atualizar para uma imagem que contenha
+o `20-plymouth.toml` e reiniciar — não basta editar o arquivo no sistema em
+execução, porque `/usr` é somente leitura.
 
 ### tuned e tuned-ppd
 
