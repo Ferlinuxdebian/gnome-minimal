@@ -110,8 +110,7 @@ instalar.
 - GNOME Shell minimalista
 - Nautilus, Ptyxis e utilitários básicos do desktop
 - Flatpak, Toolbox e Distrobox
-- Compressão btrfs (`zstd:1`) habilitada por karg
-- Splash gráfico do Plymouth (`rhgb quiet`) habilitado por karg
+- Compressão btrfs (`zstd:1`) e splash do Plymouth (`rhgb quiet`) habilitados pelos mesmos kargs
 - Bazaar, Firefox e Extension Manager instalados no **primeiro boot** via `flatpak preinstall`
 
 Os aplicativos não fazem parte da imagem: eles estão listados em
@@ -147,8 +146,7 @@ mudar a lista.
 ├── pacotes_desktop                   # pacotes do ambiente gráfico
 ├── flatpaks.preinstall               # lista de apps do primeiro boot
 ├── post-install.service              # roda o flatpak preinstall no boot
-├── 10-btrfs-compress.toml            # karg de compressão btrfs
-├── 20-plymouth.toml                  # kargs do splash do Plymouth
+├── 10-btrfs-compress.toml            # kargs de compressão btrfs e splash do Plymouth
 ├── tuned-log.conf                    # tmpfiles.d do log do tuned-ppd
 ├── locale.conf                       # idioma e formato regional
 ├── vconsole.conf                     # teclado e console
@@ -163,8 +161,7 @@ mudar a lista.
 | `pacotes_desktop` | Lista de pacotes do GNOME (um por linha) |
 | `flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
 | `post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
-| `10-btrfs-compress.toml` | Karg que ativa compressão `zstd:1` no btrfs da raiz |
-| `20-plymouth.toml` | Kargs `rhgb quiet` que exibem o splash do Plymouth no boot |
+| `10-btrfs-compress.toml` | Kargs da imagem: compressão `zstd:1` no btrfs e splash do Plymouth (`rhgb quiet`) |
 | `tuned-log.conf` | tmpfiles.d que cria e rotula `/var/log/tuned` a cada boot |
 | `locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
 | `vconsole.conf` | Layout de teclado do console |
@@ -248,38 +245,27 @@ app à lista e publicar uma nova imagem, o próximo boot instala só a diferenç
 `flatpak install`: uma única chamada resolve a lista inteira, sem repetir
 trabalho a cada boot.
 
-### Compressão btrfs
+### Kargs: compressão btrfs e splash do Plymouth
 
-O arquivo `10-btrfs-compress.toml` é instalado em
-`/usr/lib/bootc/kargs.d/` e adiciona o argumento de kernel:
+O arquivo `10-btrfs-compress.toml` é instalado em `/usr/lib/bootc/kargs.d/` e
+reúne, em um único lugar, todos os argumentos de kernel da imagem:
 
-```text
-rootflags=compress=zstd:1
+```toml
+kargs = ["rootflags=compress=zstd:1", "rhgb", "quiet"]
 ```
 
-Com isso, o btrfs da raiz passa a comprimir os arquivos novos com zstd nível 1
-— uma boa relação entre economia de espaço e velocidade. O `bootc` aplica
-esses kargs ao instalar e ao atualizar o sistema. Arquivos que já existiam
-continuam sem compressão até serem reescritos.
+- `rootflags=compress=zstd:1` ativa a compressão zstd nível 1 no btrfs da raiz.
+  Arquivos que já existiam continuam sem compressão até serem reescritos.
+- `rhgb` faz o Plymouth mostrar o splash gráfico em vez do console. O
+  `pacotes_desktop` instala o Plymouth, mas sem este argumento ele fica inativo.
+- `quiet` esconde as mensagens do kernel e dos serviços durante o boot.
 
-### Splash do Plymouth
-
-O `pacotes_desktop` instala o Plymouth, mas instalar o pacote não basta: ele só
-assume a tela quando o kernel recebe os argumentos `rhgb` e `quiet`. O arquivo
-`20-plymouth.toml` é instalado em `/usr/lib/bootc/kargs.d/` e adiciona:
-
-```text
-rhgb quiet
-```
-
-- `rhgb` faz o Plymouth mostrar o splash em vez do console;
-- `quiet` esconde as mensagens de kernel e de serviços durante o boot.
-
-Assim como os kargs de compressão, eles são aplicados pelo `bootc` na
-instalação e em cada `bootc upgrade`/`switch`. Em uma máquina que já está
-instalada, a mudança só aparece depois de atualizar para uma imagem que contenha
-o `20-plymouth.toml` e reiniciar — não basta editar o arquivo no sistema em
-execução, porque `/usr` é somente leitura.
+Manter tudo no mesmo arquivo de `kargs.d` simplifica a manutenção: em vez de
+criar um arquivo para cada argumento, basta editar esta lista. O `bootc` aplica
+os kargs ao instalar e a cada `bootc upgrade`/`switch`. Em uma máquina que já
+está instalada, a mudança só aparece depois de atualizar para uma imagem que
+contenha o arquivo e reiniciar — não basta editá-lo no sistema em execução,
+porque `/usr` é somente leitura.
 
 ### tuned e tuned-ppd
 

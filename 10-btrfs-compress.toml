@@ -1,7 +1,19 @@
 # /usr/lib/bootc/kargs.d/10-btrfs-compress.toml
 #
-# Ativa a compressão zstd:1 no btrfs da raiz.
-# Este é o mesmo karg usado no repositório bootc-gnome-minimal-f45.
+# Reúne os argumentos de kernel aplicados pelo bootc na instalação e nas
+# atualizações (bootc upgrade/switch).
 #
-# O bootc aplica estes argumentos ao instalar e ao atualizar o sistema.
-kargs = ["rootflags=compress=zstd:1"]
+# rootflags=compress=zstd:1
+#   Ativa a compressão zstd:1 no btrfs da raiz. Arquivos que já existiam
+#   continuam sem compressão até serem reescritos.
+#
+# rhgb
+#   Pede o boot gráfico (Red Hat Graphical Boot): faz o Plymouth assumir a
+#   tela em vez do console. O Plymouth é instalado por pacotes_desktop, mas
+#   sem este argumento ele fica inativo e o boot mostra apenas texto.
+#
+# quiet
+#   Esconde as mensagens do kernel e dos serviços durante o boot.
+#
+# Este é o mesmo karg usado no repositório bootc-gnome-minimal-f45.
+kargs = ["rootflags=compress=zstd:1", "rhgb", "quiet"]
