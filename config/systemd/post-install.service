@@ -3,6 +3,10 @@
 # Instala, no primeiro boot e nos seguintes, os Flatpaks listados em
 # /usr/share/flatpak/preinstall.d/flatpaks.preinstall.
 #
+# Quem dispara este serviço é o post-install.timer, 10 segundos depois de o
+# graphical.target ser alcançado. Assim o boot não fica preso esperando
+# download e a instalação acontece com o sistema/desktop já disponível.
+#
 # Vantagens em relação a instalar app por app com `flatpak install`:
 #   - o `flatpak preinstall` sincroniza a lista inteira de uma vez;
 #   - é idempotente: se o app já existe, nada é feito;
@@ -12,17 +16,16 @@
 [Unit]
 Description=Instalação dos Flatpaks iniciais (flatpak preinstall)
 Documentation=man:flatpak-preinstall(1)
-After=network-online.target
-Wants=network-online.target
+Wants=NetworkManager-wait-online.service
+After=graphical.target NetworkManager-wait-online.service
 
 [Service]
 Type=oneshot
 # O primeiro boot baixa os apps do Flathub; a margem evita timeout em rede lenta.
 TimeoutStartSec=1800
-
-# Espera a rede de verdade. O network-online.target pode concluir antes de
-# o DNS/Flathub responder, então testamos o sumário do repositório.
-ExecStartPre=/usr/bin/bash -c 'until curl -fs --max-time 10 -o /dev/null https://dl.flathub.org/repo/summary; do sleep 5; done'
+# Se a rede ainda não estiver pronta, tenta de novo sem esperar o próximo boot.
+Restart=on-failure
+RestartSec=60
 
 # O remote "fedora" não tem os apps da lista; o Flathub é a fonte.
 ExecStartPre=-/usr/bin/flatpak remote-delete --system --force fedora
@@ -30,6 +33,3 @@ ExecStartPre=/usr/bin/flatpak remote-add --system --if-not-exists flathub https:
 
 # Instala no escopo do sistema (apps disponíveis para todos os usuários).
 ExecStart=/usr/bin/flatpak preinstall --system -y --noninteractive
-
-[Install]
-WantedBy=multi-user.target

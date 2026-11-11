@@ -1,0 +1,15 @@
+# /usr/lib/systemd/system/post-install.timer
+#
+# Dispara o post-install.service 10 segundos após o graphical.target.
+# Ficar atrelado ao graphical.target evita atrasar o boot e garante que a
+# instalação dos Flatpaks rode com o desktop já carregado.
+
+[Unit]
+Description=Agenda a instalação dos Flatpaks 10s após o graphical.target
+
+[Timer]
+OnActiveSec=10s
+Unit=post-install.service
+
+[Install]
+WantedBy=graphical.target

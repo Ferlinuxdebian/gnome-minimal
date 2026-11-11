@@ -1,41 +1,61 @@
 # Imagem única para montar uma instalação mínima do Fedora 45 com interface gráfica GNOME
 FROM quay.io/fedora/fedora-bootc:45
-COPY locale.conf flatpaks.preinstall pacotes_desktop pacotes_necessarios post-install.service vconsole.conf zram-generator.conf 10-btrfs-compress.toml tuned-log.conf ./
+
+# Arquivos de configuração do repositório (pasta config/).
+# Ficam disponíveis durante o build em /run/build-inputs e são removidos
+# antes do lint final, para não deixar sobras em /run.
+COPY config/ /run/build-inputs/config/
 
 RUN mkdir -vp /var/roothome /data /var/home && \
-    dnf5 -y upgrade --refresh --setopt=tsflags=nodocs && \
-    dnf5 -y install kernel-modules-extra wget --refresh --setopt=tsflags=nodocs && \
+    # Só o kernel é atualizado: o restante vem da imagem base fedora-bootc:45,
+    # que é reconstruída diariamente. Um upgrade completo criaria uma camada
+    # grande e volátil, que o bootc teria de baixar a cada atualização.
+    dnf5 -y upgrade --refresh 'kernel*' --setopt=tsflags=nodocs && \
+    # Instala o modules-extra na MESMA versão do kernel, para não haver
+    # descompasso entre kernel-core e os módulos extras.
+    kver="$(rpm -q kernel-core --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
+    dnf5 -y install --refresh --setopt=tsflags=nodocs "kernel-modules-extra-${kver}" && \
     # Configurações de sistema
-    mv -v zram-generator.conf /usr/lib/systemd/zram-generator.conf.d/10-zram.conf || mv -v zram-generator.conf /etc/systemd/ && \
-    mv -v vconsole.conf /etc/vconsole.conf && \
-    mv -v locale.conf /etc/locale.conf && \
+    (install -Dm644 /run/build-inputs/config/system/zram-generator.conf \
+        /usr/lib/systemd/zram-generator.conf.d/10-zram.conf || \
+     install -Dm644 /run/build-inputs/config/system/zram-generator.conf \
+        /etc/systemd/zram-generator.conf) && \
+    install -Dm644 /run/build-inputs/config/system/vconsole.conf /etc/vconsole.conf && \
+    install -Dm644 /run/build-inputs/config/system/locale.conf /etc/locale.conf && \
     # Organização de diretórios e links simbólicos para persistência.
     # Os links precisam ser RELATIVOS (ln -r). Links absolutos apontam para
     # fora da raiz da imagem e o `bootc container lint` falha.
     rm -rvf /opt && mkdir -vp /var/opt && ln -vrs /var/opt /opt && \
-    mkdir -vp /var/usrlocal && mv -v /usr/local/* /var/usrlocal/ 2>/dev/null && \
+    mkdir -vp /var/usrlocal && \
+    find /usr/local -mindepth 1 -maxdepth 1 -exec mv -v -t /var/usrlocal {} + && \
     rm -rvf /usr/local && ln -vrs /var/usrlocal /usr/local && \
-    # Flatpaks do primeiro boot e serviço que os instala
-    install -Dm644 flatpaks.preinstall /usr/share/flatpak/preinstall.d/flatpaks.preinstall && \
-    install -Dm644 post-install.service /usr/lib/systemd/system/post-install.service && \
+    # Flatpaks do primeiro boot e timer que os instala após o graphical.target
+    install -Dm644 /run/build-inputs/config/flatpak/flatpaks.preinstall \
+        /usr/share/flatpak/preinstall.d/flatpaks.preinstall && \
+    install -Dm644 /run/build-inputs/config/systemd/post-install.service \
+        /usr/lib/systemd/system/post-install.service && \
+    install -Dm644 /run/build-inputs/config/systemd/post-install.timer \
+        /usr/lib/systemd/system/post-install.timer && \
     # Compressão btrfs na raiz e splash do Plymouth (rhgb quiet)
-    install -Dm644 10-btrfs-compress.toml /usr/lib/bootc/kargs.d/10-btrfs-compress.toml && \
+    install -Dm644 /run/build-inputs/config/kernel/10-btrfs-compress.toml \
+        /usr/lib/bootc/kargs.d/10-btrfs-compress.toml && \
     # Diretório de log do tuned-ppd com o contexto SELinux correto em todo boot
-    install -Dm644 tuned-log.conf /usr/lib/tmpfiles.d/tuned-log.conf && \
-    systemctl enable post-install.service && \
+    install -Dm644 /run/build-inputs/config/tmpfiles/tuned-log.conf \
+        /usr/lib/tmpfiles.d/tuned-log.conf && \
+    systemctl enable post-install.timer && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
 # Pacotes base do ambiente gráfico GNOME Minimalista.
 # Para trocar de ambiente gráfico (KDE, XFCE etc.), coloque os pacotes dele em
-# pacotes_desktop e REMOVA este bloco.
+# config/packages/pacotes_desktop e REMOVA este bloco.
 RUN dnf5 install gnome-shell --setopt=tsflags=nodocs --setopt=install_weak_deps=False -y && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/dnf/* /var/log/* /tmp/* /var/tmp/*
 
 # Instalação dos pacotes definidos nos arquivos de lista
-RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
-    grep -v '^#' pacotes_desktop | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
+RUN grep -v '^#' /run/build-inputs/config/packages/pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
+    grep -v '^#' /run/build-inputs/config/packages/pacotes_desktop | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
     systemctl mask systemd-remount-fs.service && \
     systemctl enable spice-vdagentd.service tuned.service tuned-ppd.service && \
     dnf5 clean all && \
@@ -46,7 +66,7 @@ RUN grep -v '^#' pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt
 # Limpeza de diretórios de runtime.
 # O `bootc container lint` avisa (nonempty-run-tmp) quando sobra conteúdo
 # em /run ou /tmp, porque essas pastas são recriadas a cada boot.
-RUN rm -rfv /run/dnf /run/selinux-policy /tmp/* /var/tmp/*
+RUN rm -rfv /run/build-inputs /run/dnf /run/selinux-policy /tmp/* /var/tmp/*
 
 # Verificação da imagem
 RUN bootc container lint

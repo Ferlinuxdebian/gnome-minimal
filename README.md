@@ -107,6 +107,7 @@ instalar.
 ## 3. O que vem na imagem
 
 - Base: `quay.io/fedora/fedora-bootc:45`
+- Kernel atualizado no build (`kernel*` + `kernel-modules-extra` na mesma versão); o restante do sistema vem da imagem base, reconstruída diariamente
 - GNOME Shell minimalista
 - Nautilus, Ptyxis e utilitários básicos do desktop
 - Flatpak, Toolbox e Distrobox
@@ -114,8 +115,9 @@ instalar.
 - Bazaar, Firefox e Extension Manager instalados no **primeiro boot** via `flatpak preinstall`
 
 Os aplicativos não fazem parte da imagem: eles estão listados em
-`flatpaks.preinstall` e são baixados do Flathub no primeiro boot pelo serviço
-`post-install.service`. Assim a imagem base continua pequena, os apps são
+`config/flatpak/flatpaks.preinstall` e são baixados do Flathub no primeiro boot
+pelo `post-install.service`, disparado pelo `post-install.timer` 10 segundos
+após o `graphical.target`. Assim a imagem base continua pequena, os apps são
 atualizados pelo próprio Flatpak e você não precisa rebuildar a imagem para
 mudar a lista.
 
@@ -142,31 +144,53 @@ mudar a lista.
 ```text
 .
 ├── Containerfile                     # receita do build
-├── pacotes_necessarios               # pacotes base do sistema
-├── pacotes_desktop                   # pacotes do ambiente gráfico
-├── flatpaks.preinstall               # lista de apps do primeiro boot
-├── post-install.service              # roda o flatpak preinstall no boot
-├── 10-btrfs-compress.toml            # kargs de compressão btrfs e splash do Plymouth
-├── tuned-log.conf                    # tmpfiles.d do log do tuned-ppd
-├── locale.conf                       # idioma e formato regional
-├── vconsole.conf                     # teclado e console
-├── zram-generator.conf               # swap comprimido na RAM
-└── .github/workflows/build-image.yml # build e publicação automáticos
+├── config/                           # tudo que entra na imagem
+│   ├── flatpak/
+│   │   └── flatpaks.preinstall       # lista de apps do primeiro boot
+│   ├── kernel/
+│   │   └── 10-btrfs-compress.toml    # kargs de compressão btrfs e splash do Plymouth
+│   ├── packages/
+│   │   ├── pacotes_necessarios       # pacotes base do sistema
+│   │   └── pacotes_desktop           # pacotes do ambiente gráfico
+│   ├── system/
+│   │   ├── locale.conf               # idioma e formato regional
+│   │   ├── vconsole.conf             # teclado e console
+│   │   └── zram-generator.conf       # swap comprimido na RAM
+│   ├── systemd/
+│   │   ├── post-install.service      # roda o flatpak preinstall no boot
+│   │   └── post-install.timer        # dispara o serviço 10s após o graphical.target
+│   └── tmpfiles/
+│       └── tuned-log.conf            # tmpfiles.d do log do tuned-ppd
+├── .github/workflows/build-image.yml # build e publicação automáticos
+├── LICENSE.md                        # licença do projeto
+└── README.md                         # esta documentação
 ```
+
+| Pasta | Conteúdo |
+| --- | --- |
+| `config/flatpak/` | Lista de Flatpaks instalados no primeiro boot |
+| `config/kernel/` | Argumentos de kernel aplicados pelo `bootc` (compressão btrfs e Plymouth) |
+| `config/packages/` | Listas de pacotes do sistema e do ambiente gráfico |
+| `config/system/` | Configurações de locale, teclado do console e swap em RAM (zram) |
+| `config/systemd/` | Unidades systemd que instalam os Flatpaks após o `graphical.target` |
+| `config/tmpfiles/` | Regra de `tmpfiles.d` que corrige o diretório de log do `tuned-ppd` |
 
 | Arquivo | Para que serve |
 | --- | --- |
 | `Containerfile` | Define a imagem base, o que instalar e as configurações |
-| `pacotes_necessarios` | Lista de pacotes essenciais (um por linha) |
-| `pacotes_desktop` | Lista de pacotes do GNOME (um por linha) |
-| `flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
-| `post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
-| `10-btrfs-compress.toml` | Kargs da imagem: compressão `zstd:1` no btrfs e splash do Plymouth (`rhgb quiet`) |
-| `tuned-log.conf` | tmpfiles.d que cria e rotula `/var/log/tuned` a cada boot |
-| `locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
-| `vconsole.conf` | Layout de teclado do console |
-| `zram-generator.conf` | Cria swap comprimido em RAM |
-| `build-image.yml` | GitHub Actions: builda, otimiza e publica no GHCR |
+| `config/packages/pacotes_necessarios` | Lista de pacotes essenciais (um por linha) |
+| `config/packages/pacotes_desktop` | Lista de pacotes do GNOME (um por linha) |
+| `config/flatpak/flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
+| `config/systemd/post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
+| `config/systemd/post-install.timer` | Timer que dispara o serviço 10 segundos após o `graphical.target` |
+| `config/kernel/10-btrfs-compress.toml` | Kargs da imagem: compressão `zstd:1` no btrfs e splash do Plymouth (`rhgb quiet`) |
+| `config/tmpfiles/tuned-log.conf` | tmpfiles.d que cria e rotula `/var/log/tuned` a cada boot |
+| `config/system/locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
+| `config/system/vconsole.conf` | Layout de teclado do console |
+| `config/system/zram-generator.conf` | Cria swap comprimido em RAM |
+| `.github/workflows/build-image.yml` | GitHub Actions: builda, otimiza e publica no GHCR |
+| `LICENSE.md` | Licença do projeto (CC BY 4.0) |
+| `README.md` | Documentação do projeto |
 
 ---
 
@@ -187,25 +211,28 @@ preparada para `bootc`.
 ### `COPY`
 
 ```dockerfile
-COPY locale.conf flatpaks.preinstall pacotes_desktop pacotes_necessarios \
-     post-install.service vconsole.conf zram-generator.conf \
-     10-btrfs-compress.toml tuned-log.conf ./
+COPY config/ /run/build-inputs/config/
 ```
 
-Copia os arquivos do repositório para dentro do build. Depois eles são movidos
-para os lugares definitivos.
+Copia a pasta `config/` do repositório para dentro do build, em
+`/run/build-inputs/config/`. Cada etapa seguinte usa `install -Dm644` para
+colocar cada arquivo no lugar definitivo com as permissões corretas. No fim do
+build a pasta `/run/build-inputs` é removida para não deixar sobras em `/run`.
 
 ### `RUN`
 
 Cada `RUN` executa comandos durante o build. Neste projeto eles fazem, em
 ordem:
 
-1. Atualizam o sistema e instalam utilitários básicos;
+1. Atualizam **somente os pacotes de kernel** e instalam o `kernel-modules-extra`
+   na mesma versão (o restante do sistema vem da imagem base, que é
+   reconstruída diariamente);
 2. Instalam os arquivos de configuração em `/etc` e `/usr`, o karg de
    compressão btrfs e o `tuned-log.conf`;
 3. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
    (para que esses diretórios persistam entre atualizações);
-4. Instalam o `flatpaks.preinstall` e habilitam o `post-install.service`;
+4. Instalam o `flatpaks.preinstall`, o `post-install.service` e o
+   `post-install.timer`, e habilitam o timer;
 5. Instalam o GNOME Shell em um bloco próprio, sem dependências fracas;
 6. Instalam os pacotes das duas listas;
 7. Limpam caches e diretórios temporários;
@@ -221,21 +248,39 @@ Cada `RUN` vira uma camada. Por isso os passos pesados (atualização e
 instalação de pacotes) ficam separados das configurações finais: se você mudar
 só uma configuração, o build reaproveita as camadas anteriores.
 
+### Por que atualizar só o kernel?
+
+A tag `quay.io/fedora/fedora-bootc:45` é reconstruída diariamente e já entrega
+o restante do sistema atualizado. Rodar um `dnf upgrade` completo na imagem
+criaria uma camada grande e volátil, que o `bootc upgrade` teria de baixar de
+novo a cada atualização. Por isso o build atualiza apenas `'kernel*'` e instala
+o `kernel-modules-extra` na **mesma versão** do kernel recém-atualizado,
+evitando descompasso entre o kernel e os módulos extras.
+
 ### Por que limpar `/run` e `/tmp`?
 
 O lint avisa quando encontra conteúdo em `/run` ou `/tmp` (`nonempty-run-tmp`),
-porque essas pastas são recriadas a cada boot. Sobras de `dnf` e de políticas
-SELinux aparecem ali durante o build, então são removidas antes do lint.
+porque essas pastas são recriadas a cada boot. Sobras de `dnf`, de políticas
+SELinux e a própria pasta `/run/build-inputs` (usada para levar os arquivos de
+`config/` até o lugar definitivo) aparecem ali durante o build, então são
+removidas antes do lint.
 
 ### Flatpaks do primeiro boot
 
 A imagem **não** instala aplicativos durante o build. Ela apenas deixa uma
-lista em `/usr/share/flatpak/preinstall.d/flatpaks.preinstall`. No boot, o
-`post-install.service`:
+lista em `/usr/share/flatpak/preinstall.d/flatpaks.preinstall`. O
+`post-install.timer` é habilitado em `graphical.target` e dispara o
+`post-install.service` 10 segundos depois que o desktop termina de subir.
+Assim o boot não fica esperando download e a instalação começa com o sistema
+já utilizável. O serviço então:
 
-1. espera a rede responder (testa o sumário do Flathub com `curl`);
+1. espera a rede ficar online pelo `NetworkManager-wait-online.service`;
 2. troca o remote `fedora` pelo `flathub`;
 3. roda `flatpak preinstall --system -y --noninteractive`.
+
+Se a rede ou o Flathub falharem, o serviço tenta de novo a cada 60 segundos
+(`Restart=on-failure`) e, se ainda assim não terminar, roda outra vez no
+próximo boot junto com o timer.
 
 Esse comando é **idempotente e sincronizador**: instala o que falta, não mexe
 no que já existe e respeita apps que o usuário removeu. Se você adicionar um
@@ -332,8 +377,8 @@ O nome precisa ser **minúsculo** e seguir o padrão do GHCR:
 
 Quase toda personalização começa em dois arquivos:
 
-- **`pacotes_necessarios`** — base do sistema, ferramentas e serviços.
-- **`pacotes_desktop`** — tudo que é do ambiente gráfico.
+- **`config/packages/pacotes_necessarios`** — base do sistema, ferramentas e serviços.
+- **`config/packages/pacotes_desktop`** — tudo que é do ambiente gráfico.
 
 Cada linha é um pacote. Linhas com `#` são comentários. Exemplo:
 
@@ -345,12 +390,12 @@ neovim
 
 O `gnome-shell` é instalado em um bloco próprio no `Containerfile`, com
 `--setopt=install_weak_deps=False` (só dependências obrigatórias). O restante
-de `pacotes_desktop` é instalado normalmente, com as dependências fracas
-habilitadas.
+de `config/packages/pacotes_desktop` é instalado normalmente, com as
+dependências fracas habilitadas.
 
 > **Para trocar de ambiente gráfico:** coloque os pacotes do novo ambiente
-> (KDE, XFCE etc.) em `pacotes_desktop` e remova o bloco do `gnome-shell` do
-> `Containerfile`.
+> (KDE, XFCE etc.) em `config/packages/pacotes_desktop` e remova o bloco do
+> `gnome-shell` do `Containerfile`.
 
 Para descobrir o nome exato de um pacote no Fedora:
 
@@ -363,15 +408,16 @@ dnf5 search nome-do-pacote
 
 ### 7.5 Personalize o sistema
 
-- **Idioma:** `locale.conf`
-- **Teclado do console:** `vconsole.conf`
-- **Swap em RAM:** `zram-generator.conf`
-- **Flatpaks do primeiro boot:** `flatpaks.preinstall` (lista) e
-  `post-install.service` (quem executa)
-- **Argumentos de kernel:** `10-btrfs-compress.toml` (compressão btrfs)
-- **Log do `tuned-ppd`:** `tuned-log.conf` (diretório e contexto SELinux)
-- **Arquivos novos:** adicione um `COPY` no `Containerfile` e mova o arquivo
-  para o destino final dentro de um `RUN`
+- **Idioma:** `config/system/locale.conf`
+- **Teclado do console:** `config/system/vconsole.conf`
+- **Swap em RAM:** `config/system/zram-generator.conf`
+- **Flatpaks do primeiro boot:** `config/flatpak/flatpaks.preinstall` (lista),
+  `config/systemd/post-install.service` (quem executa) e
+  `config/systemd/post-install.timer` (quando executa)
+- **Argumentos de kernel:** `config/kernel/10-btrfs-compress.toml` (compressão btrfs)
+- **Log do `tuned-ppd`:** `config/tmpfiles/tuned-log.conf` (diretório e contexto SELinux)
+- **Arquivos novos:** adicione o arquivo na pasta `config/` mais adequada e um
+  `install -Dm644` no `Containerfile` para o destino final dentro de um `RUN`
 
 ### 7.6 Teste o build localmente (opcional, mas recomendado)
 
@@ -565,24 +611,36 @@ journalctl -u tuned.service -b --no-pager
 ```
 
 **Os Flatpaks não instalaram no primeiro boot**
-O `post-install.service` espera a rede e roda `flatpak preinstall`. A primeira
-execução baixa os três apps e pode demorar alguns minutos. Verifique:
+O `post-install.timer` dispara o `post-install.service` 10 segundos depois do
+`graphical.target`. O serviço espera a rede e roda `flatpak preinstall`; a
+primeira execução baixa os três apps e pode demorar alguns minutos. Verifique:
 
 ```bash
+systemctl status post-install.timer
 systemctl status post-install.service
 journalctl -u post-install.service -b
 flatpak list --system
 ```
 
-Se a rede ainda não estiver disponível, o serviço fica tentando; ele roda de
-novo no próximo boot. Para forçar manualmente:
+Se a rede ainda não estiver disponível, o serviço tenta de novo a cada 60
+segundos; ele também roda outra vez no próximo boot junto com o timer. Para
+forçar manualmente:
 
 ```bash
 sudo flatpak preinstall --system -y --noninteractive
 ```
 
+Se o timer estiver inativo, confira se ele está habilitado para o
+`graphical.target`:
+
+```bash
+systemctl is-enabled post-install.timer
+systemctl list-timers post-install.timer
+```
+
 Se um app não existir mais no Flathub, o `preinstall` falha naquele item.
-Confira o ID em `flatpaks.preinstall` e remova ou corrija a linha.
+Confira o ID em `config/flatpak/flatpaks.preinstall` e remova ou corrija a
+linha.
 
 ---
 
