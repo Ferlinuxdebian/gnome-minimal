@@ -449,20 +449,73 @@ dnf5 search nome-do-pacote
 > **Atenção:** um nome errado derruba o build com
 > `No match for argument`. Confira antes de enviar.
 
-### 7.6 Personalize o sistema
+### 7.6 Adicione Flatpaks
+
+Os aplicativos Flatpak ficam em `config/flatpak/flatpaks.preinstall`. O arquivo
+usa o formato do `flatpak preinstall`: uma seção por aplicativo, com o ID do
+Flathub entre colchetes e a branch logo abaixo.
+
+Exemplo de um app novo:
+
+```ini
+# Calculadora do GNOME
+[Flatpak Preinstall org.gnome.Calculator]
+Branch=stable
+```
+
+Regras do formato:
+
+- use o **ID exato** do aplicativo no Flathub (ex.: `org.mozilla.firefox`);
+- o ID vai entre `[Flatpak Preinstall ...]`, sem espaços;
+- `Branch=stable` é o padrão para a maioria dos apps;
+- linhas com `#` são comentários;
+- separe cada app com uma linha em branco, para facilitar a leitura.
+
+Para descobrir o ID, use a busca do Flatpak ou o site do Flathub:
+
+```bash
+flatpak search calculadora
+```
+
+No Flathub, o ID aparece na página do app (em **Install** / **Comando de
+instalação**).
+
+Depois de editar a lista:
+
+```bash
+git add config/flatpak/flatpaks.preinstall
+git commit -m "Adiciona Flatpaks"
+git push origin main
+```
+
+O push publica uma nova imagem. Na máquina instalada, `sudo bootc upgrade` e
+reboot aplicam a lista nova; o `post-install.service` roda
+`flatpak preinstall` de novo e instala apenas o que falta. Se quiser forçar na
+hora, sem esperar o próximo boot:
+
+```bash
+sudo flatpak preinstall --system -y --noninteractive
+```
+
+> A instalação é **idempotente**: apps que já existem são ignorados e apps que
+> o usuário removeu não voltam sozinhos. Só a diferença entre a lista e o que
+> está instalado é aplicada.
+
+### 7.7 Personalize o sistema
 
 - **Idioma:** `config/system/locale.conf`
 - **Teclado do console:** `config/system/vconsole.conf`
 - **Swap em RAM:** `config/system/zram-generator.conf`
 - **Flatpaks do primeiro boot:** `config/flatpak/flatpaks.preinstall` (lista),
   `config/systemd/post-install.service` (quem executa) e
-  `config/systemd/post-install.timer` (quando executa)
+  `config/systemd/post-install.timer` (quando executa) — passo a passo na
+  seção 7.6
 - **Argumentos de kernel:** `config/kernel/10-btrfs-compress.toml` (compressão btrfs)
 - **Log do `tuned-ppd`:** `config/tmpfiles/tuned-log.conf` (diretório e contexto SELinux)
 - **Arquivos novos:** adicione o arquivo na pasta `config/` mais adequada e um
   `install -Dm644` no `Containerfile` para o destino final dentro de um `RUN`
 
-### 7.7 Teste o build localmente (opcional, mas recomendado)
+### 7.8 Teste o build localmente (opcional, mas recomendado)
 
 ```bash
 sudo podman build \
@@ -487,7 +540,7 @@ rpm -q gnome-shell
 bootc container lint
 ```
 
-### 7.8 Publique no GHCR
+### 7.9 Publique no GHCR
 
 ```bash
 git add -A
@@ -504,7 +557,7 @@ O GitHub Actions vai:
 
 Acompanhe em **Actions** no GitHub. No fim, a imagem aparece em **Packages**.
 
-### 7.9 Deixe o pacote público (ou faça login)
+### 7.10 Deixe o pacote público (ou faça login)
 
 Por padrão, pacotes do GHCR podem ficar privados. Para instalar sem login:
 
@@ -519,7 +572,7 @@ Se preferir manter privado, faça login na máquina que vai instalar:
 podman login ghcr.io
 ```
 
-### 7.10 Instale a sua imagem
+### 7.11 Instale a sua imagem
 
 Em uma máquina que já usa `bootc` (Fedora Silverblue, Kinoite, outra imagem
 bootc, etc.):
@@ -541,7 +594,7 @@ Você verá a imagem e o digest em uso.
 > [anaconda-webui-bootc-installer](https://github.com/Ferlinuxdebian/anaconda-webui-bootc-installer)
 > gera uma ISO que instala a imagem do zero em VM ou hardware real.
 
-### 7.11 Atualize depois de mudar algo
+### 7.12 Atualize depois de mudar algo
 
 Sempre que você alterar o repositório e fizer push, uma nova imagem é
 publicada. Na máquina:
