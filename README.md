@@ -9,6 +9,13 @@ como transformar um `Containerfile` em um sistema operacional instalável,
 publicá-lo em um registro de imagens e atualizar a máquina trocando a imagem
 inteira — com direito a rollback se algo der errado.
 
+> **Este repositório é um template.** Use o botão **Use this template**
+> (**Usar este modelo**) **→ Create a new repository** para gerar a sua própria
+> cópia, com histórico e configurações independentes deste projeto. Depois siga
+> o passo a passo da seção 7.
+
+[![Use this template](https://img.shields.io/badge/Use%20this-template-2ea44f?logo=github)](https://github.com/Ferlinuxdebian/gnome-minimal/generate)
+
 > Se você nunca ouviu falar em sistema atômico, imagem OCI ou `bootc`, leia a
 > próxima seção. Ela explica os conceitos usados no resto do guia.
 
@@ -341,18 +348,28 @@ arquivo vem da imagem, a correção também vale para máquinas que apenas fazem
 
 ### 7.1 Pré-requisitos
 
-- Conta no GitHub (para o fork e para o GHCR).
+- Conta no GitHub (para criar o repositório a partir do template e para o
+  GHCR).
 - Opcional: uma máquina Fedora com `podman` para testar o build localmente.
   Se não tiver, pode deixar o build só no GitHub Actions.
 
-### 7.2 Faça um fork e clone
+### 7.2 Crie seu repositório a partir do template
 
-Faça o fork no GitHub e clone o **seu** repositório:
+Este projeto foi publicado como **template**. No GitHub, clique em **Use this
+template** (**Usar este modelo**) **→ Create a new repository**, escolha o dono,
+o nome e a visibilidade e confirme. O GitHub cria um repositório novo, só com os
+arquivos deste projeto (sem o histórico de commits daqui).
+
+Depois clone o **seu** repositório:
 
 ```bash
-git clone https://github.com/SEU-USUARIO/gnome-minimal.git
-cd gnome-minimal
+git clone https://github.com/SEU-USUARIO/SEU-REPOSITORIO.git
+cd SEU-REPOSITORIO
 ```
+
+> Se preferir, um **fork** também funciona. A diferença é que o fork mantém o
+> vínculo com este repositório e o histórico; o template gera uma cópia limpa,
+> que é o recomendado para começar um projeto próprio.
 
 ### 7.3 Ajuste o nome da imagem
 
@@ -371,7 +388,8 @@ env:
 ```
 
 O nome precisa ser **minúsculo** e seguir o padrão do GHCR:
-`usuario/nome-da-imagem`.
+`usuario/nome-da-imagem`. Ele não precisa ser igual ao nome do repositório —
+`IMAGE_NAME` é o que define onde a imagem será publicada.
 
 ### 7.4 Escolha os pacotes
 
@@ -470,8 +488,9 @@ Acompanhe em **Actions** no GitHub. No fim, a imagem aparece em **Packages**.
 
 Por padrão, pacotes do GHCR podem ficar privados. Para instalar sem login:
 
-1. Abra **Packages** no seu perfil do GitHub;
-2. Entre em `gnome-minimal`;
+1. Abra **Packages** no seu perfil ou na página do repositório;
+2. Entre no pacote com o nome definido em `IMAGE_NAME` (por exemplo,
+   `gnome-minimal`);
 3. **Package settings** → **Change visibility** → **Public**.
 
 Se preferir manter privado, faça login na máquina que vai instalar:
