@@ -1,5 +1,13 @@
 # Fedora Bootc GNOME Minimal
 
+[![Use this template](https://img.shields.io/badge/Use%20this-template-2ea44f?logo=github)](https://github.com/Ferlinuxdebian/gnome-minimal/generate)
+![feito com bootc](https://img.shields.io/badge/feito_com-bootc-51A2DA)
+![base Fedora 45](https://img.shields.io/badge/base-Fedora_45-51A2DA?logo=fedora&logoColor=white)
+![sistema atômico](https://img.shields.io/badge/sistema-At%C3%B4mico-3fb950)
+![imagem OCI](https://img.shields.io/badge/imagem-OCI-2496ED?logo=opencontainersinitiative&logoColor=white)
+![feito com Podman](https://img.shields.io/badge/feito_com-Podman-892CA0?logo=podman&logoColor=white)
+![compatível com Docker](https://img.shields.io/badge/compat%C3%ADvel_com-Docker-2496ED?logo=docker&logoColor=white)
+
 Uma imagem de sistema **atômico** baseada no **Fedora 45**, com um **GNOME
 minimalista**, criada para servir de referência para quem está começando com
 `bootc`.
@@ -13,8 +21,6 @@ inteira — com direito a rollback se algo der errado.
 > (**Usar este modelo**) **→ Create a new repository** para gerar a sua própria
 > cópia, com histórico e configurações independentes deste projeto. Depois siga
 > o passo a passo da seção 7.
-
-[![Use this template](https://img.shields.io/badge/Use%20this-template-2ea44f?logo=github)](https://github.com/Ferlinuxdebian/gnome-minimal/generate)
 
 > Se você nunca ouviu falar em sistema atômico, imagem OCI ou `bootc`, leia a
 > próxima seção. Ela explica os conceitos usados no resto do guia.
