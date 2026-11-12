@@ -1,6 +1,8 @@
 # Pacotes do ambiente gráfico GNOME.
-# Para trocar de desktop, coloque os pacotes do novo ambiente nesta lista e
-# remova o bloco do gnome-shell no Containerfile.
+# Para trocar de desktop, substitua os pacotes abaixo pelos do novo ambiente.
+# O Containerfile detecta automaticamente se o gnome-shell está nesta lista:
+# com ele, instala o GNOME sem dependências fracas; sem ele, pula esse passo.
+gnome-shell
 glycin-thumbnailer
 gnome-epub-thumbnailer
 papers-thumbnailer
@@ -21,7 +23,7 @@ libcanberra-backend-pulse
 libcanberra-backend-gstreamer
 libcanberra-backend-alsa
 
-# Plymouth deixa o boot mais bonito.
+# Plymouth deixa o boot mais bonito. (Esse pode permanecer em todos os ambientes gráficos)
 plymouth
 plymouth-core-libs
 plymouth-graphics-libs

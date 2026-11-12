@@ -46,12 +46,19 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
-# Pacotes base do ambiente gráfico GNOME Minimalista.
-# Para trocar de ambiente gráfico (KDE, XFCE etc.), coloque os pacotes dele em
-# config/packages/pacotes_desktop e REMOVA este bloco.
-RUN dnf5 install gnome-shell --setopt=tsflags=nodocs --setopt=install_weak_deps=False -y && \
-    dnf5 clean all && \
-    rm -rfv /var/cache/* /var/lib/dnf/* /var/log/* /tmp/* /var/tmp/*
+# gnome-shell é instalado à parte, sem dependências fracas, para manter a
+# instalação mínima. O bloco só roda se "gnome-shell" estiver em
+# config/packages/pacotes_desktop. Se o usuário trocar de ambiente gráfico
+# (KDE, XFCE etc.) e remover o gnome-shell da lista, o passo é ignorado.
+RUN if grep -v '^#' /run/build-inputs/config/packages/pacotes_desktop \
+        | grep -qx '[[:space:]]*gnome-shell[[:space:]]*'; then \
+        dnf5 install gnome-shell \
+            --setopt=tsflags=nodocs --setopt=install_weak_deps=False -y && \
+        dnf5 clean all && \
+        rm -rfv /var/cache/* /var/lib/dnf/* /var/log/* /tmp/* /var/tmp/*; \
+    else \
+        echo "gnome-shell ausente de pacotes_desktop; pulando instalação mínima do GNOME."; \
+    fi
 
 # Instalação dos pacotes definidos nos arquivos de lista
 RUN grep -v '^#' /run/build-inputs/config/packages/pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \

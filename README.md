@@ -388,14 +388,19 @@ fastfetch
 neovim
 ```
 
-O `gnome-shell` é instalado em um bloco próprio no `Containerfile`, com
-`--setopt=install_weak_deps=False` (só dependências obrigatórias). O restante
-de `config/packages/pacotes_desktop` é instalado normalmente, com as
-dependências fracas habilitadas.
+O `gnome-shell` fica em `config/packages/pacotes_desktop`, mas é instalado em
+um passo próprio do `Containerfile`, com `--setopt=install_weak_deps=False`
+(só dependências obrigatórias). O restante da lista é instalado normalmente,
+com as dependências fracas habilitadas.
 
-> **Para trocar de ambiente gráfico:** coloque os pacotes do novo ambiente
-> (KDE, XFCE etc.) em `config/packages/pacotes_desktop` e remova o bloco do
-> `gnome-shell` do `Containerfile`.
+O `Containerfile` procura `gnome-shell` na lista antes de rodar esse passo.
+Se a linha existir, instala o GNOME sem dependências fracas; se não existir,
+o passo é ignorado automaticamente.
+
+> **Para trocar de ambiente gráfico:** substitua os pacotes do GNOME pelos do
+> novo ambiente (KDE, XFCE etc.) em `config/packages/pacotes_desktop`. Ao
+> remover a linha `gnome-shell`, o passo do GNOME no `Containerfile` deixa de
+> rodar — não é preciso editar o `Containerfile`.
 
 Para descobrir o nome exato de um pacote no Fedora:
 
