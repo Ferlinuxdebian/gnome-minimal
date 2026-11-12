@@ -371,7 +371,21 @@ cd SEU-REPOSITORIO
 > vínculo com este repositório e o histórico; o template gera uma cópia limpa,
 > que é o recomendado para começar um projeto próprio.
 
-### 7.3 Ajuste o nome da imagem
+### 7.3 Habilite as permissões de escrita
+
+Antes de rodar o workflow, libere a escrita para o GitHub Actions no **seu**
+repositório:
+
+1. Abra **Settings → Actions → General**;
+2. Em **Workflow permissions**, selecione **Read and write permissions**;
+3. Clique em **Save**.
+
+Sem essa opção, o token do workflow não consegue publicar a imagem no GHCR e o
+build falha no push (erro de permissão/`denied`). O workflow já declara
+`packages: write`, mas a configuração do repositório precisa permitir esse
+acesso.
+
+### 7.4 Ajuste o nome da imagem
 
 Abra `.github/workflows/build-image.yml` e troque:
 
@@ -391,7 +405,7 @@ O nome precisa ser **minúsculo** e seguir o padrão do GHCR:
 `usuario/nome-da-imagem`. Ele não precisa ser igual ao nome do repositório —
 `IMAGE_NAME` é o que define onde a imagem será publicada.
 
-### 7.4 Escolha os pacotes
+### 7.5 Escolha os pacotes
 
 Quase toda personalização começa em dois arquivos:
 
@@ -429,7 +443,7 @@ dnf5 search nome-do-pacote
 > **Atenção:** um nome errado derruba o build com
 > `No match for argument`. Confira antes de enviar.
 
-### 7.5 Personalize o sistema
+### 7.6 Personalize o sistema
 
 - **Idioma:** `config/system/locale.conf`
 - **Teclado do console:** `config/system/vconsole.conf`
@@ -442,7 +456,7 @@ dnf5 search nome-do-pacote
 - **Arquivos novos:** adicione o arquivo na pasta `config/` mais adequada e um
   `install -Dm644` no `Containerfile` para o destino final dentro de um `RUN`
 
-### 7.6 Teste o build localmente (opcional, mas recomendado)
+### 7.7 Teste o build localmente (opcional, mas recomendado)
 
 ```bash
 sudo podman build \
@@ -467,7 +481,7 @@ rpm -q gnome-shell
 bootc container lint
 ```
 
-### 7.7 Publique no GHCR
+### 7.8 Publique no GHCR
 
 ```bash
 git add -A
@@ -484,7 +498,7 @@ O GitHub Actions vai:
 
 Acompanhe em **Actions** no GitHub. No fim, a imagem aparece em **Packages**.
 
-### 7.8 Deixe o pacote público (ou faça login)
+### 7.9 Deixe o pacote público (ou faça login)
 
 Por padrão, pacotes do GHCR podem ficar privados. Para instalar sem login:
 
@@ -499,7 +513,7 @@ Se preferir manter privado, faça login na máquina que vai instalar:
 podman login ghcr.io
 ```
 
-### 7.9 Instale a sua imagem
+### 7.10 Instale a sua imagem
 
 Em uma máquina que já usa `bootc` (Fedora Silverblue, Kinoite, outra imagem
 bootc, etc.):
@@ -521,7 +535,7 @@ Você verá a imagem e o digest em uso.
 > [anaconda-webui-bootc-installer](https://github.com/Ferlinuxdebian/anaconda-webui-bootc-installer)
 > gera uma ISO que instala a imagem do zero em VM ou hardware real.
 
-### 7.10 Atualize depois de mudar algo
+### 7.11 Atualize depois de mudar algo
 
 Sempre que você alterar o repositório e fizer push, uma nova imagem é
 publicada. Na máquina:
@@ -594,8 +608,11 @@ Sobrou conteúdo em `/run` ou `/tmp`. Remova esses arquivos antes do
 A imagem está privada. Torne o pacote público no GitHub ou rode
 `podman login ghcr.io`.
 
-**O workflow falha no login do GHCR**
-Verifique se `permissions: packages: write` está presente no job e se o
+**O workflow falha no login/push do GHCR**
+Confirme duas coisas: `permissions: packages: write` no job (o workflow já
+inclui) e **Settings → Actions → General → Workflow permissions** definido como
+**Read and write permissions** no repositório. Sem a segunda opção, o token não
+tem permissão de escrita e o push da imagem é negado. Verifique também se o
 pacote ainda não existe com outro dono.
 
 **A máquina não sobe depois do switch**
