@@ -22,6 +22,12 @@ inteira — com direito a rollback se algo der errado.
 > cópia, com histórico e configurações independentes deste projeto. Depois siga
 > o passo a passo da seção 7.
 
+> **Personalização em um único arquivo.** Nome da imagem, Flatpaks, pacotes,
+> ambiente gráfico e repositórios extras ficam todos em
+> **`config/imagem.conf`**. Edite esse arquivo e faça commit/push: o build é
+> disparado automaticamente. Se quiser, também pode rodar o workflow
+> manualmente em **Actions**. O passo a passo está na seção 7.
+
 > Se você nunca ouviu falar em sistema atômico, imagem OCI ou `bootc`, leia a
 > próxima seção. Ela explica os conceitos usados no resto do guia.
 
@@ -127,8 +133,8 @@ instalar.
 - Compressão btrfs (`zstd:1`) e splash do Plymouth (`rhgb quiet`) habilitados pelos mesmos kargs
 - Bazaar, Firefox e Extension Manager instalados no **primeiro boot** via `flatpak preinstall`
 
-Os aplicativos não fazem parte da imagem: eles estão listados em
-`config/flatpak/flatpaks.preinstall` e são baixados do Flathub no primeiro boot
+Os aplicativos não fazem parte da imagem: eles estão listados na seção
+`[flatpaks]` de `config/imagem.conf` e são baixados do Flathub no primeiro boot
 pelo `post-install.service`, disparado pelo `post-install.timer` 10 segundos
 após o `graphical.target`. Assim a imagem base continua pequena, os apps são
 atualizados pelo próprio Flatpak e você não precisa rebuildar a imagem para
@@ -158,13 +164,11 @@ mudar a lista.
 .
 ├── Containerfile                     # receita do build
 ├── config/                           # tudo que entra na imagem
-│   ├── flatpak/
-│   │   └── flatpaks.preinstall       # lista de apps do primeiro boot
+│   ├── imagem.conf                   # ★ personalização: nome, Flatpaks, pacotes e repositórios
+│   ├── build/
+│   │   └── prepare-config.sh         # lê imagem.conf e gera as listas do build
 │   ├── kernel/
 │   │   └── 10-btrfs-compress.toml    # kargs de compressão btrfs e splash do Plymouth
-│   ├── packages/
-│   │   ├── pacotes_necessarios       # pacotes base do sistema
-│   │   └── pacotes_desktop           # pacotes do ambiente gráfico
 │   ├── system/
 │   │   ├── locale.conf               # idioma e formato regional
 │   │   ├── vconsole.conf             # teclado e console
@@ -181,9 +185,9 @@ mudar a lista.
 
 | Pasta | Conteúdo |
 | --- | --- |
-| `config/flatpak/` | Lista de Flatpaks instalados no primeiro boot |
+| `config/imagem.conf` | **Arquivo principal de personalização** (nome da imagem, Flatpaks, pacotes, DE e repositórios) |
+| `config/build/` | Script que transforma o `imagem.conf` nas listas usadas pelo build |
 | `config/kernel/` | Argumentos de kernel aplicados pelo `bootc` (compressão btrfs e Plymouth) |
-| `config/packages/` | Listas de pacotes do sistema e do ambiente gráfico |
 | `config/system/` | Configurações de locale, teclado do console e swap em RAM (zram) |
 | `config/systemd/` | Unidades systemd que instalam os Flatpaks após o `graphical.target` |
 | `config/tmpfiles/` | Regra de `tmpfiles.d` que corrige o diretório de log do `tuned-ppd` |
@@ -191,9 +195,8 @@ mudar a lista.
 | Arquivo | Para que serve |
 | --- | --- |
 | `Containerfile` | Define a imagem base, o que instalar e as configurações |
-| `config/packages/pacotes_necessarios` | Lista de pacotes essenciais (um por linha) |
-| `config/packages/pacotes_desktop` | Lista de pacotes do GNOME (um por linha) |
-| `config/flatpak/flatpaks.preinstall` | Lista de Flatpaks instalados no primeiro boot (formato do `flatpak preinstall`) |
+| `config/imagem.conf` | **Edite aqui:** nome da imagem, Flatpaks, pacotes, DE, RPM Fusion, Terra e Negativo17 |
+| `config/build/prepare-config.sh` | Valida o `imagem.conf` e gera as listas de pacotes e o `flatpaks.preinstall` |
 | `config/systemd/post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
 | `config/systemd/post-install.timer` | Timer que dispara o serviço 10 segundos após o `graphical.target` |
 | `config/kernel/10-btrfs-compress.toml` | Kargs da imagem: compressão `zstd:1` no btrfs e splash do Plymouth (`rhgb quiet`) |
@@ -201,7 +204,7 @@ mudar a lista.
 | `config/system/locale.conf` | Idioma padrão (`pt_BR.UTF-8`) |
 | `config/system/vconsole.conf` | Layout de teclado do console |
 | `config/system/zram-generator.conf` | Cria swap comprimido em RAM |
-| `.github/workflows/build-image.yml` | GitHub Actions: builda, otimiza e publica no GHCR |
+| `.github/workflows/build-image.yml` | GitHub Actions: lê o nome de `config/imagem.conf`, builda, otimiza e publica no GHCR |
 | `LICENSE.md` | Licença do projeto (CC BY 4.0) |
 | `README.md` | Documentação do projeto |
 
@@ -232,24 +235,30 @@ Copia a pasta `config/` do repositório para dentro do build, em
 colocar cada arquivo no lugar definitivo com as permissões corretas. No fim do
 build a pasta `/run/build-inputs` é removida para não deixar sobras em `/run`.
 
+Logo depois, `config/build/prepare-config.sh` lê `config/imagem.conf` e gera as
+listas de pacotes e o `flatpaks.preinstall` em `/run/build-inputs/generated/`.
+Assim, o mesmo arquivo de configuração serve para o build local e para o
+GitHub Actions — inclusive para descobrir o nome da imagem a ser publicada.
+
 ### `RUN`
 
 Cada `RUN` executa comandos durante o build. Neste projeto eles fazem, em
 ordem:
 
-1. Atualizam **somente os pacotes de kernel** e instalam o `kernel-modules-extra`
+1. Leem `config/imagem.conf` e geram as listas de Flatpaks e de pacotes;
+2. Atualizam **somente os pacotes de kernel** e instalam o `kernel-modules-extra`
    na mesma versão (o restante do sistema vem da imagem base, que é
    reconstruída diariamente);
-2. Instalam os arquivos de configuração em `/etc` e `/usr`, o karg de
-   compressão btrfs e o `tuned-log.conf`;
-3. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
+3. Instalam os arquivos de configuração em `/etc` e `/usr`, o karg de
+   compressão btrfs, o `tuned-log.conf` e o `flatpaks.preinstall` gerado;
+4. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
    (para que esses diretórios persistam entre atualizações);
-4. Instalam o `flatpaks.preinstall`, o `post-install.service` e o
-   `post-install.timer`, e habilitam o timer;
-5. Instalam o GNOME Shell em um bloco próprio, sem dependências fracas;
-6. Instalam os pacotes das duas listas;
-7. Limpam caches e diretórios temporários;
-8. Rodam o `bootc container lint`.
+5. Habilitam os repositórios extras marcados com `true` no `imagem.conf`
+   (RPM Fusion, Terra e/ou Negativo17);
+6. Instalam o GNOME Shell em um bloco próprio, sem dependências fracas;
+7. Instalam os pacotes das seções `[pacotes]` e `[pacotes-desktop]`;
+8. Limpam caches e diretórios temporários;
+9. Rodam o `bootc container lint`.
 
 > **Detalhe importante:** os links usam `ln -vrs`, com `r` de *relative*.
 > Links absolutos (`/usr/local -> /var/usrlocal`) apontam para fora da raiz da
@@ -314,8 +323,9 @@ kargs = ["rootflags=compress=zstd:1", "rhgb", "quiet"]
 
 - `rootflags=compress=zstd:1` ativa a compressão zstd nível 1 no btrfs da raiz.
   Arquivos que já existiam continuam sem compressão até serem reescritos.
-- `rhgb` faz o Plymouth mostrar o splash gráfico em vez do console. O
-  `pacotes_desktop` instala o Plymouth, mas sem este argumento ele fica inativo.
+- `rhgb` faz o Plymouth mostrar o splash gráfico em vez do console. A seção
+  `[pacotes-desktop]` instala o Plymouth, mas sem este argumento ele fica
+  inativo.
 - `quiet` esconde as mensagens do kernel e dos serviços durante o boot.
 
 Manter tudo no mesmo arquivo de `kargs.d` simplifica a manutenção: em vez de
@@ -351,6 +361,11 @@ arquivo vem da imagem, a correção também vale para máquinas que apenas fazem
 ---
 
 ## 7. Passo a passo: crie a sua versão
+
+> **Resumo para quem só quer personalizar:** crie o repositório a partir do
+> template (7.2), libere as permissões do Actions (7.3) e edite
+> **`config/imagem.conf`**. Depois faça commit e push: o workflow builda e
+> publica a imagem automaticamente. As subseções abaixo explicam cada opção.
 
 ### 7.1 Pré-requisitos
 
@@ -393,52 +408,59 @@ acesso.
 
 ### 7.4 Ajuste o nome da imagem
 
-Abra `.github/workflows/build-image.yml` e troque:
+Abra `config/imagem.conf` e troque a linha:
 
-```yaml
-env:
-  IMAGE_NAME: ferlinuxdebian/gnome-minimal
+```text
+IMAGE_NAME=ferlinuxdebian/gnome-minimal
 ```
 
-por:
+pelo nome que você quer publicar:
 
-```yaml
-env:
-  IMAGE_NAME: SEU-USUARIO/gnome-minimal
+```text
+IMAGE_NAME=SEU-USUARIO/gnome-minimal
 ```
 
-O nome precisa ser **minúsculo** e seguir o padrão do GHCR:
-`usuario/nome-da-imagem`. Ele não precisa ser igual ao nome do repositório —
-`IMAGE_NAME` é o que define onde a imagem será publicada.
+Use **letras minúsculas** e o formato `usuario/nome-da-imagem`. O nome não
+precisa ser igual ao nome do repositório do GitHub — `IMAGE_NAME` é o que
+define onde a imagem será publicada no GHCR. O workflow lê esse mesmo valor
+automaticamente; não é preciso editar `.github/workflows/build-image.yml`.
 
-### 7.5 Escolha os pacotes
+Depois de mudar o nome, publique uma nova imagem (seção 7.9) e use o mesmo
+nome em `bootc switch` na instalação.
 
-Quase toda personalização começa em dois arquivos:
+### 7.5 Escolha pacotes, ambiente gráfico e repositórios
 
-- **`config/packages/pacotes_necessarios`** — base do sistema, ferramentas e serviços.
-- **`config/packages/pacotes_desktop`** — tudo que é do ambiente gráfico.
+Tudo isso fica em **`config/imagem.conf`**, em duas seções:
+
+- **`[pacotes]`** — base do sistema, ferramentas e serviços;
+- **`[pacotes-desktop]`** — tudo que é do ambiente gráfico.
 
 Cada linha é um pacote. Linhas com `#` são comentários. Exemplo:
 
 ```text
+[pacotes]
 htop
 fastfetch
 neovim
+
+[pacotes-desktop]
+gnome-shell
+nautilus
 ```
 
-O `gnome-shell` fica em `config/packages/pacotes_desktop`, mas é instalado em
-um passo próprio do `Containerfile`, com `--setopt=install_weak_deps=False`
-(só dependências obrigatórias). O restante da lista é instalado normalmente,
-com as dependências fracas habilitadas.
+O `gnome-shell` fica em `[pacotes-desktop]`, mas é instalado em um passo
+próprio do `Containerfile`, com `--setopt=install_weak_deps=False` (só
+dependências obrigatórias). O restante da lista é instalado normalmente, com
+as dependências fracas habilitadas.
 
 O `Containerfile` procura `gnome-shell` na lista antes de rodar esse passo.
 Se a linha existir, instala o GNOME sem dependências fracas; se não existir,
 o passo é ignorado automaticamente.
 
 > **Para trocar de ambiente gráfico:** substitua os pacotes do GNOME pelos do
-> novo ambiente (KDE, XFCE etc.) em `config/packages/pacotes_desktop`. Ao
-> remover a linha `gnome-shell`, o passo do GNOME no `Containerfile` deixa de
-> rodar — não é preciso editar o `Containerfile`.
+> novo ambiente (KDE, XFCE etc.) em `[pacotes-desktop]`. Ao remover a linha
+> `gnome-shell`, o passo do GNOME no `Containerfile` deixa de rodar — não é
+> preciso editar o `Containerfile`.
 
 Para descobrir o nome exato de um pacote no Fedora:
 
@@ -449,27 +471,61 @@ dnf5 search nome-do-pacote
 > **Atenção:** um nome errado derruba o build com
 > `No match for argument`. Confira antes de enviar.
 
-### 7.6 Adicione Flatpaks
+#### Repositórios extras
 
-Os aplicativos Flatpak ficam em `config/flatpak/flatpaks.preinstall`. O arquivo
-usa o formato do `flatpak preinstall`: uma seção por aplicativo, com o ID do
-Flathub entre colchetes e a branch logo abaixo.
+No topo do `imagem.conf` há três opções `true`/`false`:
 
-Exemplo de um app novo:
-
-```ini
-# Calculadora do GNOME
-[Flatpak Preinstall org.gnome.Calculator]
-Branch=stable
+```text
+RPMFUSION=false
+TERRA=false
+NEGATIVO17=false
 ```
 
-Regras do formato:
+| Opção | O que habilita |
+| --- | --- |
+| `RPMFUSION` | RPM Fusion **free** e **nonfree** (codecs, drivers etc.) |
+| `TERRA` | Repositório **Terra** (pacotes extras e atualizados da comunidade) |
+| `NEGATIVO17` | Repositório **Negativo17 multimedia** (codecs, FFmpeg, drivers etc.) |
+
+Coloque `true` apenas no que você precisa e faça o build. Os repositórios são
+habilitados **antes** da instalação dos pacotes, então você pode listar
+normalmente em `[pacotes]` um pacote que só existe neles.
+
+> **Evite combinar repositórios que oferecem os mesmos pacotes.** RPM Fusion e
+> Negativo17, por exemplo, têm codecs e drivers parecidos. Habilitar os dois
+> pode gerar conflito de versões ou de prioridade. Escolha um para cada tipo de
+> pacote.
+
+Para conferir depois, dentro da imagem ou do sistema instalado:
+
+```bash
+dnf5 repolist
+```
+
+### 7.6 Adicione Flatpaks
+
+Os aplicativos Flatpak ficam na seção `[flatpaks]` de `config/imagem.conf`.
+Você só precisa informar o **ID do app no Flathub**, um por linha:
+
+```text
+[flatpaks]
+# Calculadora do GNOME
+org.gnome.Calculator
+
+# Navegador
+org.mozilla.firefox
+```
+
+O script de build transforma essa lista no formato que o
+`flatpak preinstall` entende, com `Branch=stable`. Ou seja: não é preciso
+escrever `[Flatpak Preinstall ...]` nem `Branch=` — basta o ID.
+
+Regras:
 
 - use o **ID exato** do aplicativo no Flathub (ex.: `org.mozilla.firefox`);
-- o ID vai entre `[Flatpak Preinstall ...]`, sem espaços;
-- `Branch=stable` é o padrão para a maioria dos apps;
+- um ID por linha, sem espaços;
 - linhas com `#` são comentários;
-- separe cada app com uma linha em branco, para facilitar a leitura.
+- a branch usada é sempre `stable` (a padrão da maioria dos apps).
 
 Para descobrir o ID, use a busca do Flatpak ou o site do Flathub:
 
@@ -483,7 +539,7 @@ instalação**).
 Depois de editar a lista:
 
 ```bash
-git add config/flatpak/flatpaks.preinstall
+git add config/imagem.conf
 git commit -m "Adiciona Flatpaks"
 git push origin main
 ```
@@ -503,10 +559,11 @@ sudo flatpak preinstall --system -y --noninteractive
 
 ### 7.7 Personalize o sistema
 
+- **Nome da imagem, Flatpaks, pacotes, DE e repositórios:** `config/imagem.conf`
 - **Idioma:** `config/system/locale.conf`
 - **Teclado do console:** `config/system/vconsole.conf`
 - **Swap em RAM:** `config/system/zram-generator.conf`
-- **Flatpaks do primeiro boot:** `config/flatpak/flatpaks.preinstall` (lista),
+- **Flatpaks do primeiro boot:** `config/imagem.conf` (lista),
   `config/systemd/post-install.service` (quem executa) e
   `config/systemd/post-install.timer` (quando executa) — passo a passo na
   seção 7.6
@@ -550,20 +607,26 @@ git push origin main
 
 O GitHub Actions vai:
 
-1. buildar a imagem;
-2. otimizar as camadas com `bootc-base-imagectl rechunk`;
-3. publicar em `ghcr.io/SEU-USUARIO/gnome-minimal`;
-4. criar as tags `latest`, `main`, `45-latest` e `sha-<commit>`.
+1. ler e validar o `config/imagem.conf`;
+2. buildar a imagem;
+3. otimizar as camadas com `bootc-base-imagectl rechunk`;
+4. publicar em `ghcr.io/` + o valor de `IMAGE_NAME`;
+5. criar as tags `latest`, `main`, `45-latest` e `sha-<commit>`.
 
 Acompanhe em **Actions** no GitHub. No fim, a imagem aparece em **Packages**.
+
+> Você também pode disparar o build manualmente: depois de enviar a mudança,
+> abra **Actions**, escolha **Build e Push da Imagem Bootc** e clique em
+> **Run workflow**. Isso é útil para reconstruir a imagem sem alterar nenhum
+> arquivo.
 
 ### 7.10 Deixe o pacote público (ou faça login)
 
 Por padrão, pacotes do GHCR podem ficar privados. Para instalar sem login:
 
 1. Abra **Packages** no seu perfil ou na página do repositório;
-2. Entre no pacote com o nome definido em `IMAGE_NAME` (por exemplo,
-   `gnome-minimal`);
+2. Entre no pacote com o nome definido em `IMAGE_NAME` no
+   `config/imagem.conf` (por exemplo, `gnome-minimal`);
 3. **Package settings** → **Change visibility** → **Public**.
 
 Se preferir manter privado, faça login na máquina que vai instalar:
@@ -739,7 +802,7 @@ systemctl list-timers post-install.timer
 ```
 
 Se um app não existir mais no Flathub, o `preinstall` falha naquele item.
-Confira o ID em `config/flatpak/flatpaks.preinstall` e remova ou corrija a
+Confira a seção `[flatpaks]` de `config/imagem.conf` e remova ou corrija a
 linha.
 
 ---

@@ -9,8 +9,9 @@
 #
 # rhgb
 #   Pede o boot gráfico (Red Hat Graphical Boot): faz o Plymouth assumir a
-#   tela em vez do console. O Plymouth é instalado por pacotes_desktop, mas
-#   sem este argumento ele fica inativo e o boot mostra apenas texto.
+#   tela em vez do console. O Plymouth é instalado pela seção
+#   [pacotes-desktop] de config/imagem.conf, mas sem este argumento ele fica
+#   inativo e o boot mostra apenas texto.
 #
 # quiet
 #   Esconde as mensagens do kernel e dos serviços durante o boot.

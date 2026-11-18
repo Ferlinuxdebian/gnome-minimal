@@ -6,6 +6,10 @@ FROM quay.io/fedora/fedora-bootc:45
 # antes do lint final, para não deixar sobras em /run.
 COPY config/ /run/build-inputs/config/
 
+# Lê config/imagem.conf e gera as listas de pacotes e de Flatpaks.
+# Este é o ÚNICO arquivo que precisa ser editado para personalizar a imagem.
+RUN bash /run/build-inputs/config/build/prepare-config.sh
+
 RUN mkdir -vp /var/roothome /data /var/home && \
     # Só o kernel é atualizado: o restante vem da imagem base fedora-bootc:45,
     # que é reconstruída diariamente. Um upgrade completo criaria uma camada
@@ -30,7 +34,7 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     find /usr/local -mindepth 1 -maxdepth 1 -exec mv -v -t /var/usrlocal {} + && \
     rm -rvf /usr/local && ln -vrs /var/usrlocal /usr/local && \
     # Flatpaks do primeiro boot e timer que os instala após o graphical.target
-    install -Dm644 /run/build-inputs/config/flatpak/flatpaks.preinstall \
+    install -Dm644 /run/build-inputs/generated/flatpaks.preinstall \
         /usr/share/flatpak/preinstall.d/flatpaks.preinstall && \
     install -Dm644 /run/build-inputs/config/systemd/post-install.service \
         /usr/lib/systemd/system/post-install.service && \
@@ -46,25 +50,56 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
+# Repositórios de terceiros opcionais, controlados em config/imagem.conf.
+# A ordem importa: eles precisam existir antes da instalação dos pacotes.
+RUN . /run/build-inputs/generated/settings.env && \
+    if [ "$RPMFUSION" = "true" ]; then \
+        echo "→ Habilitando RPM Fusion (free e nonfree)"; \
+        dnf5 -y install --setopt=tsflags=nodocs \
+            "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm" \
+            "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm"; \
+    fi && \
+    if [ "$TERRA" = "true" ]; then \
+        echo "→ Habilitando o repositório Terra"; \
+        dnf5 -y install --nogpgcheck --setopt=tsflags=nodocs \
+            --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' \
+            terra-release terra-gpg-keys; \
+    fi && \
+    if [ "$NEGATIVO17" = "true" ]; then \
+        echo "→ Habilitando o repositório Negativo17 (multimedia)"; \
+        dnf5 -y install --setopt=tsflags=nodocs dnf5-plugins && \
+        dnf5 config-manager addrepo \
+            --from-repofile=https://negativo17.org/repos/fedora-multimedia.repo; \
+    fi
+
 # gnome-shell é instalado à parte, sem dependências fracas, para manter a
 # instalação mínima. O bloco só roda se "gnome-shell" estiver em
-# config/packages/pacotes_desktop. Se o usuário trocar de ambiente gráfico
-# (KDE, XFCE etc.) e remover o gnome-shell da lista, o passo é ignorado.
-RUN if grep -v '^#' /run/build-inputs/config/packages/pacotes_desktop \
-        | grep -qx '[[:space:]]*gnome-shell[[:space:]]*'; then \
+# [pacotes-desktop] de config/imagem.conf. Se o usuário trocar de ambiente
+# gráfico (KDE, XFCE etc.) e remover o gnome-shell da lista, o passo é ignorado.
+RUN if grep -qx 'gnome-shell' /run/build-inputs/generated/pacotes-desktop; then \
         dnf5 install gnome-shell \
             --setopt=tsflags=nodocs --setopt=install_weak_deps=False -y && \
         dnf5 clean all && \
         rm -rfv /var/cache/* /var/lib/dnf/* /var/log/* /tmp/* /var/tmp/*; \
     else \
-        echo "gnome-shell ausente de pacotes_desktop; pulando instalação mínima do GNOME."; \
+        echo "gnome-shell ausente de [pacotes-desktop]; pulando instalação mínima do GNOME."; \
     fi
 
-# Instalação dos pacotes definidos nos arquivos de lista
-RUN grep -v '^#' /run/build-inputs/config/packages/pacotes_necessarios | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
-    grep -v '^#' /run/build-inputs/config/packages/pacotes_desktop | tr '\n' ' ' | xargs dnf5 install --setopt=tsflags=nodocs -y && \
+# Instalação dos pacotes definidos em config/imagem.conf.
+RUN if [ -s /run/build-inputs/generated/pacotes ]; then \
+        xargs -r dnf5 install --setopt=tsflags=nodocs -y \
+            < /run/build-inputs/generated/pacotes; \
+    fi && \
+    if [ -s /run/build-inputs/generated/pacotes-desktop ]; then \
+        xargs -r dnf5 install --setopt=tsflags=nodocs -y \
+            < /run/build-inputs/generated/pacotes-desktop; \
+    fi && \
     systemctl mask systemd-remount-fs.service && \
-    systemctl enable spice-vdagentd.service tuned.service tuned-ppd.service && \
+    for svc in spice-vdagentd.service tuned.service tuned-ppd.service; do \
+        if systemctl cat "$svc" >/dev/null 2>&1; then \
+            systemctl enable "$svc"; \
+        fi; \
+    done && \
     dnf5 clean all && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/* \
     /var/usrlocal/share/applications/mimeinfo.cache \

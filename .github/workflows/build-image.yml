@@ -11,7 +11,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ferlinuxdebian/gnome-minimal
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
@@ -34,15 +33,24 @@ jobs:
       - name: Gerar metadados do build
         id: meta
         run: |
+          # Valida config/imagem.conf e lê o nome publicado no GHCR.
+          CONFIG_OUT="$(mktemp -d)"
+          CONFIG_DIR="$PWD/config" OUT_DIR="$CONFIG_OUT" \
+            bash config/build/prepare-config.sh
+          # shellcheck disable=SC1091
+          . "$CONFIG_OUT/settings.env"
+          rm -rf "$CONFIG_OUT"
+
           VERSION=$(grep '^FROM' Containerfile | head -n 1 | awk -F: '{print $2}' | awk '{print $1}')
           DATE=$(TZ='America/Sao_Paulo' date +'%Y%m%d-%H%M')
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          PRIMARY="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}-${DATE}"
+          PRIMARY="${{ env.REGISTRY }}/${IMAGE_NAME}:${VERSION}-${DATE}"
 
-          echo "version=${VERSION}"     >> $GITHUB_OUTPUT
-          echo "date=${DATE}"           >> $GITHUB_OUTPUT
-          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
-          echo "primary=${PRIMARY}"     >> $GITHUB_OUTPUT
+          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}"       >> $GITHUB_OUTPUT
+          echo "date=${DATE}"             >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}"   >> $GITHUB_OUTPUT
+          echo "primary=${PRIMARY}"       >> $GITHUB_OUTPUT
 
       - name: Login no GHCR
         run: |
@@ -75,7 +83,7 @@ jobs:
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
           SHORT_SHA="${{ steps.meta.outputs.short_sha }}"
-          BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          BASE="${{ env.REGISTRY }}/${{ steps.meta.outputs.image_name }}"
           CREDS="${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}"
 
           for TAG in "${VERSION}-latest" "latest" "main" "sha-${SHORT_SHA}"; do
