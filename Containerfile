@@ -51,26 +51,10 @@ RUN mkdir -vp /var/roothome /data /var/home && \
     rm -rfv /var/cache/* /var/lib/* /var/log/* /var/tmp/*
 
 # Repositórios de terceiros opcionais, controlados em config/imagem.conf.
-# A ordem importa: eles precisam existir antes da instalação dos pacotes.
-RUN . /run/build-inputs/generated/settings.env && \
-    if [ "$RPMFUSION" = "true" ]; then \
-        echo "→ Habilitando RPM Fusion (free e nonfree)"; \
-        dnf5 -y install --setopt=tsflags=nodocs \
-            "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm" \
-            "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm"; \
-    fi && \
-    if [ "$TERRA" = "true" ]; then \
-        echo "→ Habilitando o repositório Terra"; \
-        dnf5 -y install --nogpgcheck --setopt=tsflags=nodocs \
-            --repofrompath 'terra,https://repos.fyralabs.com/terra$releasever' \
-            terra-release terra-gpg-keys; \
-    fi && \
-    if [ "$NEGATIVO17" = "true" ]; then \
-        echo "→ Habilitando o repositório Negativo17 (multimedia)"; \
-        dnf5 -y install --setopt=tsflags=nodocs dnf5-plugins && \
-        dnf5 config-manager addrepo \
-            --from-repofile=https://negativo17.org/repos/fedora-multimedia.repo; \
-    fi
+# O script abaixo APENAS configura os repositórios (arquivos .repo e chaves
+# GPG). Nenhum pacote do repositório é instalado aqui: quem escolhe os pacotes
+# é a seção [pacotes] de config/imagem.conf.
+RUN bash /run/build-inputs/config/build/enable-repos.sh
 
 # gnome-shell é instalado à parte, sem dependências fracas, para manter a
 # instalação mínima. O bloco só roda se "gnome-shell" estiver em

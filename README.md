@@ -27,6 +27,11 @@ inteira — com direito a rollback se algo der errado.
 > **`config/imagem.conf`**. Edite esse arquivo e faça commit/push: o build é
 > disparado automaticamente. Se quiser, também pode rodar o workflow
 > manualmente em **Actions**. O passo a passo está na seção 7.
+>
+> **Antes do primeiro build:** troque `IMAGE_NAME` pelo **mesmo nome do
+> repositório que você criou a partir do template** (ex.:
+> `joao/minha-imagem`). Isso evita falha de permissão no GHCR e deixa o
+> endereço da imagem igual ao do repositório.
 
 > Se você nunca ouviu falar em sistema atômico, imagem OCI ou `bootc`, leia a
 > próxima seção. Ela explica os conceitos usados no resto do guia.
@@ -166,7 +171,8 @@ mudar a lista.
 ├── config/                           # tudo que entra na imagem
 │   ├── imagem.conf                   # ★ personalização: nome, Flatpaks, pacotes e repositórios
 │   ├── build/
-│   │   └── prepare-config.sh         # lê imagem.conf e gera as listas do build
+│   │   ├── prepare-config.sh          # lê o imagem.conf e gera as listas
+│   │   └── enable-repos.sh            # habilita repositórios (sem instalar pacotes)
 │   ├── kernel/
 │   │   └── 10-btrfs-compress.toml    # kargs de compressão btrfs e splash do Plymouth
 │   ├── system/
@@ -186,7 +192,7 @@ mudar a lista.
 | Pasta | Conteúdo |
 | --- | --- |
 | `config/imagem.conf` | **Arquivo principal de personalização** (nome da imagem, Flatpaks, pacotes, DE e repositórios) |
-| `config/build/` | Script que transforma o `imagem.conf` nas listas usadas pelo build |
+| `config/build/` | Scripts que validam o `imagem.conf`, geram as listas e habilitam repositórios |
 | `config/kernel/` | Argumentos de kernel aplicados pelo `bootc` (compressão btrfs e Plymouth) |
 | `config/system/` | Configurações de locale, teclado do console e swap em RAM (zram) |
 | `config/systemd/` | Unidades systemd que instalam os Flatpaks após o `graphical.target` |
@@ -197,6 +203,7 @@ mudar a lista.
 | `Containerfile` | Define a imagem base, o que instalar e as configurações |
 | `config/imagem.conf` | **Edite aqui:** nome da imagem, Flatpaks, pacotes, DE, RPM Fusion, Terra e Negativo17 |
 | `config/build/prepare-config.sh` | Valida o `imagem.conf` e gera as listas de pacotes e o `flatpaks.preinstall` |
+| `config/build/enable-repos.sh` | Habilita os repositórios escolhidos (arquivos `.repo` + chaves GPG), **sem instalar pacotes** |
 | `config/systemd/post-install.service` | Serviço systemd que espera a rede e roda `flatpak preinstall` |
 | `config/systemd/post-install.timer` | Timer que dispara o serviço 10 segundos após o `graphical.target` |
 | `config/kernel/10-btrfs-compress.toml` | Kargs da imagem: compressão `zstd:1` no btrfs e splash do Plymouth (`rhgb quiet`) |
@@ -254,9 +261,12 @@ ordem:
 4. Criam `/opt` e `/usr/local` como links **relativos** para `/var`
    (para que esses diretórios persistam entre atualizações);
 5. Habilitam os repositórios extras marcados com `true` no `imagem.conf`
-   (RPM Fusion, Terra e/ou Negativo17);
+   (RPM Fusion, Terra e/ou Negativo17). Esse passo **só cria os arquivos
+   `.repo` e importa as chaves GPG**: nenhum pacote do repositório é instalado;
 6. Instalam o GNOME Shell em um bloco próprio, sem dependências fracas;
-7. Instalam os pacotes das seções `[pacotes]` e `[pacotes-desktop]`;
+7. Instalam **somente** os pacotes listados em `[pacotes]` e
+   `[pacotes-desktop]`; conforme a opção `MULTIMEDIA`, o grupo `@multimedia`
+   pode ser incluído automaticamente (veja a seção 7.5);
 8. Limpam caches e diretórios temporários;
 9. Rodam o `bootc container lint`.
 
@@ -406,7 +416,7 @@ build falha no push (erro de permissão/`denied`). O workflow já declara
 `packages: write`, mas a configuração do repositório precisa permitir esse
 acesso.
 
-### 7.4 Ajuste o nome da imagem
+### 7.4 Ajuste o nome da imagem (o passo mais importante)
 
 Abra `config/imagem.conf` e troque a linha:
 
@@ -414,16 +424,43 @@ Abra `config/imagem.conf` e troque a linha:
 IMAGE_NAME=ferlinuxdebian/gnome-minimal
 ```
 
-pelo nome que você quer publicar:
+pelo **mesmo nome do repositório que você criou a partir do template**:
 
 ```text
-IMAGE_NAME=SEU-USUARIO/gnome-minimal
+IMAGE_NAME=SEU-USUARIO/NOME-DO-SEU-REPOSITORIO
 ```
 
-Use **letras minúsculas** e o formato `usuario/nome-da-imagem`. O nome não
-precisa ser igual ao nome do repositório do GitHub — `IMAGE_NAME` é o que
-define onde a imagem será publicada no GHCR. O workflow lê esse mesmo valor
-automaticamente; não é preciso editar `.github/workflows/build-image.yml`.
+Exemplo: se o repositório clonado é
+`https://github.com/joao/minha-imagem`, use:
+
+```text
+IMAGE_NAME=joao/minha-imagem
+```
+
+Regras:
+
+- use exatamente `usuario/repositorio`, com **letras minúsculas**;
+- o `usuario` precisa ser o dono do repositório no GitHub;
+- **não deixe** o valor padrão `ferlinuxdebian/gnome-minimal` no seu fork,
+  a menos que você realmente vá publicar no namespace `ferlinuxdebian`;
+- o nome não precisa ser igual ao nome do arquivo `Containerfile` nem ao nome
+  da pasta local — ele precisa bater com o **repositório do GitHub**.
+
+Por que isso importa:
+
+- o workflow publica a imagem em `ghcr.io/` + o valor de `IMAGE_NAME`;
+- o dono (`usuario`) precisa ser o mesmo do repositório; se não for, o push
+  no GHCR falha com `denied`/permissão negada;
+- mesmo quando o push funciona com outro nome, o endereço da imagem fica
+  diferente do repositório e confunde na hora do `bootc switch`;
+- usando o mesmo nome do repositório, o endereço fica óbvio:
+  `ghcr.io/SEU-USUARIO/NOME-DO-SEU-REPOSITORIO`.
+
+O workflow lê esse mesmo valor automaticamente; não é preciso editar
+`.github/workflows/build-image.yml`. Se você deixar o valor padrão do template
+em um repositório com outro nome, o workflow **para com erro** e mostra o
+`IMAGE_NAME` que deveria ser usado. Se o nome for diferente do repositório mas
+não for o padrão, ele apenas emite um aviso.
 
 Depois de mudar o nome, publique uma nova imagem (seção 7.9) e use o mesmo
 nome em `bootc switch` na instalação.
@@ -453,6 +490,15 @@ próprio do `Containerfile`, com `--setopt=install_weak_deps=False` (só
 dependências obrigatórias). O restante da lista é instalado normalmente, com
 as dependências fracas habilitadas.
 
+> **Estas duas listas são a única fonte de pacotes da imagem.** Habilitar um
+> repositório (RPM Fusion, Terra ou Negativo17) **não instala nada**: apenas
+> deixa o repositório disponível. Se você quer um codec, driver ou aplicativo
+> que está lá, adicione o nome do pacote em `[pacotes]` ou
+> `[pacotes-desktop]`.
+>
+> A única exceção é o grupo `@multimedia`, que é controlado pela opção
+> `MULTIMEDIA` (veja abaixo).
+
 O `Containerfile` procura `gnome-shell` na lista antes de rodar esse passo.
 Se a linha existir, instala o GNOME sem dependências fracas; se não existir,
 o passo é ignorado automaticamente.
@@ -461,6 +507,32 @@ o passo é ignorado automaticamente.
 > novo ambiente (KDE, XFCE etc.) em `[pacotes-desktop]`. Ao remover a linha
 > `gnome-shell`, o passo do GNOME no `Containerfile` deixa de rodar — não é
 > preciso editar o `Containerfile`.
+
+#### Multimídia do GNOME (`MULTIMEDIA`)
+
+A opção `MULTIMEDIA`, no topo do `imagem.conf`, controla o grupo
+`@multimedia`:
+
+```text
+MULTIMEDIA=auto
+```
+
+| Valor | Comportamento |
+| --- | --- |
+| `auto` | Com `RPMFUSION=false`, instala `@multimedia` do Fedora. Com `RPMFUSION=true`, **não instala** automaticamente. |
+| `true` | Instala `@multimedia` sempre. Com RPM Fusion habilitado, pode vir dos pacotes `freeworld`. |
+| `false` | Nunca instala `@multimedia` automaticamente. |
+
+O padrão é `auto`. O motivo de não instalar com `RPMFUSION=true` é que os
+pacotes `freeworld` do RPM Fusion **costumam quebrar com frequência** —
+principalmente quando a versão do Fedora e a do RPM Fusion ficam
+descompassadas. Assim:
+
+- **RPM Fusion desligado:** você ganha o grupo multimídia do Fedora, que é a
+  opção mais estável;
+- **RPM Fusion ligado:** o repositório fica disponível, mas o grupo não é
+  instalado sozinho. Adicione apenas os pacotes que você realmente quer em
+  `[pacotes]`, ou use `MULTIMEDIA=true` se aceitar o risco.
 
 Para descobrir o nome exato de um pacote no Fedora:
 
@@ -476,25 +548,48 @@ dnf5 search nome-do-pacote
 No topo do `imagem.conf` há três opções `true`/`false`:
 
 ```text
-RPMFUSION=false
+RPMFUSION=true
 TERRA=false
 NEGATIVO17=false
 ```
 
+Neste repositório, o RPM Fusion já vem **habilitado** por padrão. Para
+desligar, troque para `RPMFUSION=false`.
+
 | Opção | O que habilita |
 | --- | --- |
-| `RPMFUSION` | RPM Fusion **free** e **nonfree** (codecs, drivers etc.) |
-| `TERRA` | Repositório **Terra** (pacotes extras e atualizados da comunidade) |
-| `NEGATIVO17` | Repositório **Negativo17 multimedia** (codecs, FFmpeg, drivers etc.) |
+| `RPMFUSION` | RPM Fusion **free** e **nonfree** |
+| `TERRA` | Repositório **Terra** |
+| `NEGATIVO17` | Repositório **Negativo17 multimedia** |
 
-Coloque `true` apenas no que você precisa e faça o build. Os repositórios são
-habilitados **antes** da instalação dos pacotes, então você pode listar
-normalmente em `[pacotes]` um pacote que só existe neles.
+> **RPM Fusion costuma quebrar com frequência**, principalmente por
+> descompasso de versões entre o Fedora e os pacotes `freeworld`. Por isso o
+> padrão `MULTIMEDIA=auto` **não instala** o grupo `@multimedia`
+> automaticamente quando `RPMFUSION=true`; veja a seção 7.5.
 
-> **Evite combinar repositórios que oferecem os mesmos pacotes.** RPM Fusion e
-> Negativo17, por exemplo, têm codecs e drivers parecidos. Habilitar os dois
-> pode gerar conflito de versões ou de prioridade. Escolha um para cada tipo de
-> pacote.
+> **Habilitar não é instalar.** Esses toggles apenas criam os arquivos
+> `.repo` e importam as chaves GPG. Nenhum codec, GStreamer, driver ou
+> aplicativo é instalado por causa deles. Quem instala pacotes são as listas
+> `[pacotes]` e `[pacotes-desktop]`.
+
+Depois de habilitar, instale o que você quiser listando o pacote normalmente:
+
+```text
+[pacotes]
+ffmpeg
+gstreamer1-plugins-bad-freeworld
+```
+
+O script que faz isso é o `config/build/enable-repos.sh`. Ele **não** roda
+`dnf install`: baixa os arquivos de configuração oficiais e importa as chaves
+GPG. Assim o repositório fica disponível, mas a escolha dos pacotes continua
+100% nas suas listas.
+
+> **RPM Fusion e Negativo17 não podem ser usados juntos.** Os dois fornecem
+> pacotes de GStreamer/codecs com os mesmos arquivos, e o build falha com
+> conflito entre `gstreamer1-plugins-bad-freeworld` (RPM Fusion) e
+> `gstreamer1-plugins-bad` (Negativo17). O `prepare-config.sh` detecta isso
+> antes do build e mostra uma mensagem clara. Escolha um dos dois.
 
 Para conferir depois, dentro da imagem ou do sistema instalado:
 
@@ -560,6 +655,7 @@ sudo flatpak preinstall --system -y --noninteractive
 ### 7.7 Personalize o sistema
 
 - **Nome da imagem, Flatpaks, pacotes, DE e repositórios:** `config/imagem.conf`
+- **Grupo multimídia (`@multimedia`):** opção `MULTIMEDIA` em `config/imagem.conf`
 - **Idioma:** `config/system/locale.conf`
 - **Teclado do console:** `config/system/vconsole.conf`
 - **Swap em RAM:** `config/system/zram-generator.conf`

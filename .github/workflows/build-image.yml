@@ -41,6 +41,18 @@ jobs:
           . "$CONFIG_OUT/settings.env"
           rm -rf "$CONFIG_OUT"
 
+          # O nome publicado deve ser o mesmo do repositório clonado do
+          # template. Sem isso, o push no GHCR falha com "denied".
+          REPOSITORY="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          if [ "$IMAGE_NAME" = "ferlinuxdebian/gnome-minimal" ] && \
+             [ "$REPOSITORY" != "$IMAGE_NAME" ]; then
+            echo "::error title=IMAGE_NAME não configurado::Troque IMAGE_NAME em config/imagem.conf pelo nome do seu repositório ($REPOSITORY). O valor atual ainda é o do template."
+            exit 1
+          fi
+          if [ "$IMAGE_NAME" != "$REPOSITORY" ]; then
+            echo "::warning title=IMAGE_NAME diferente do repositório::Recomendado usar IMAGE_NAME=$REPOSITORY (mesmo nome do repositório clonado). Valor atual: $IMAGE_NAME."
+          fi
+
           VERSION=$(grep '^FROM' Containerfile | head -n 1 | awk -F: '{print $2}' | awk '{print $1}')
           DATE=$(TZ='America/Sao_Paulo' date +'%Y%m%d-%H%M')
           SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)

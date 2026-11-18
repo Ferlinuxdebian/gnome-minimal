@@ -33,6 +33,7 @@ IMAGE_NAME=""
 RPMFUSION="false"
 TERRA="false"
 NEGATIVO17="false"
+MULTIMEDIA="auto"
 SECTION=""
 LINE_NO=0
 
@@ -65,6 +66,19 @@ normalize_bool() {
         false|0|no|nao|não|off|'') printf 'false' ;;
         *)
             fail "${key} deve ser true ou false (valor encontrado: '$2')."
+            ;;
+    esac
+}
+
+normalize_multimedia() {
+    local value="${1,,}"
+
+    case "$value" in
+        auto|automatico|automático) printf 'auto' ;;
+        true|1|yes|sim|on)         printf 'true' ;;
+        false|0|no|nao|não|off)    printf 'false' ;;
+        *)
+            fail "MULTIMEDIA deve ser auto, true ou false (valor encontrado: '$1')."
             ;;
     esac
 }
@@ -148,8 +162,11 @@ while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
             NEGATIVO17|NEGATIVO_17)
                 NEGATIVO17="$(normalize_bool "$key" "$value")"
                 ;;
+            MULTIMEDIA|MULTIMÍDIA)
+                MULTIMEDIA="$(normalize_multimedia "$value")"
+                ;;
             *)
-                fail "opção desconhecida '$key'. Opções válidas: IMAGE_NAME, RPMFUSION, TERRA, NEGATIVO17."
+                fail "opção desconhecida '$key'. Opções válidas: IMAGE_NAME, RPMFUSION, TERRA, NEGATIVO17, MULTIMEDIA."
                 ;;
         esac
         continue
@@ -181,6 +198,27 @@ if [[ ! "$IMAGE_NAME" =~ ^[a-z0-9][a-z0-9._-]*(\/[a-z0-9][a-z0-9._-]*)+$ ]]; the
     fail "IMAGE_NAME inválido: '$IMAGE_NAME'. Use o formato usuario/nome-da-imagem."
 fi
 
+# RPM Fusion e Negativo17 disputam os mesmos arquivos de GStreamer/codecs.
+# Falhar aqui evita um erro de transação do dnf5 muito mais difícil de entender.
+if [[ "$RPMFUSION" == "true" && "$NEGATIVO17" == "true" ]]; then
+    LINE_NO=0
+    fail "RPMFUSION e NEGATIVO17 não podem ser true ao mesmo tempo: os dois fornecem pacotes GStreamer/codecs conflitantes. Escolha um deles (recomendado: RPMFUSION=true e NEGATIVO17=false)."
+fi
+
+# Grupo multimídia:
+#   auto  -> instala @multimedia somente com RPM Fusion desligado (Fedora);
+#   true  -> instala sempre (pode vir do RPM Fusion, se habilitado);
+#   false -> nunca instala automaticamente.
+# Quando RPMFUSION=true e MULTIMEDIA=auto, não injetamos o grupo porque os
+# pacotes freeworld do RPM Fusion costumam quebrar com frequência. O usuário
+# ainda pode adicionar @multimedia ou pacotes individuais em [pacotes].
+if [[ "$MULTIMEDIA" == "true" ]] || \
+   { [[ "$MULTIMEDIA" == "auto" ]] && [[ "$RPMFUSION" != "true" ]]; }; then
+    if ! grep -qx '@multimedia' "$OUT_DIR/pacotes"; then
+        printf '@multimedia\n' >> "$OUT_DIR/pacotes"
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # Gera o arquivo do flatpak preinstall
 # ---------------------------------------------------------------------------
@@ -203,6 +241,7 @@ fi
     printf 'RPMFUSION=%s\n' "$RPMFUSION"
     printf 'TERRA=%s\n' "$TERRA"
     printf 'NEGATIVO17=%s\n' "$NEGATIVO17"
+    printf 'MULTIMEDIA=%s\n' "$MULTIMEDIA"
 } > "$OUT_DIR/settings.env"
 
 # ---------------------------------------------------------------------------
@@ -217,6 +256,15 @@ echo "  imagem:            $IMAGE_NAME"
 echo "  RPM Fusion:        $RPMFUSION"
 echo "  Terra:             $TERRA"
 echo "  Negativo17:        $NEGATIVO17"
+if [[ "$MULTIMEDIA" == "auto" ]]; then
+    if [[ "$RPMFUSION" == "true" ]]; then
+        echo "  Multimídia:        auto (NÃO instala @multimedia com RPM Fusion)"
+    else
+        echo "  Multimídia:        auto (instala @multimedia do Fedora)"
+    fi
+else
+    echo "  Multimídia:        $MULTIMEDIA"
+fi
 echo "  Flatpaks:          $(count_lines "$OUT_DIR/flatpaks")"
 echo "  Pacotes base:      $(count_lines "$OUT_DIR/pacotes")"
 echo "  Pacotes do desk.:  $(count_lines "$OUT_DIR/pacotes-desktop")"
